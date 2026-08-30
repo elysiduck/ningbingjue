@@ -401,7 +401,12 @@ class Application:
         # plans_dir 用区块自身的模块相对路径（blocks/powerplans/），无需手动指定。
         try:
             from .blocks.powerplan import PowerPlanBlock
-            self._load_block("powerplan", PowerPlanBlock(cfg, app=self))
+            # probe_in_background：GUI 模式下把 __init__ 的 powercfg 串行探测
+            # （实测 3.82s，boot 最大热点）挪到后台线程；headless/测试保持同步。
+            self._load_block(
+                "powerplan",
+                PowerPlanBlock(cfg, app=self,
+                               probe_in_background=not self.headless))
         except Exception as e:  # noqa: BLE001
             self._log_block_failure("powerplan", e)
         _mark("powerplan")

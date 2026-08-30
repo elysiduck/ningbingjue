@@ -27,3 +27,6 @@ frozen_pids.txt
 
 # ---- WorkBuddy 会话数据 ----
 .workbuddy/
+
+# ---- 运行时状态（程序运行期写入，体积随用增长）----
+frozen_groups.json

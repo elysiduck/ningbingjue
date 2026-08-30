@@ -94,6 +94,14 @@ from .gamepad import create_backend
 from .interaction import InteractionController
 from .keyutil import key_token_from_event
 from .panels import make_panel, PerfMonPanel, PerfMonPopup, _FitScrollArea
+from .page_transition import (
+    DEFAULT_TRANSITION_MS,
+    SAFETY_MARGIN_MS,
+    TRANSITION_MODES,
+    PageIndicator,
+    PageTransition,
+    TransitionVeil,
+)
 from ..core.metrics import MetricSampler
 from ..platform.ryzenadj import _GpuUtilMonitor
 from ..platform.undervolt import (
@@ -720,6 +728,7 @@ class _OverlayWindow(QWidget):
         self._card_bg_color = QColor(14, 17, 23)
         self._card_bg_image = ""
         self._card_bg_pixmap = None  # cached, tray-sized (logical px), lazy-built
+        self._card_bg_pixmap_key = None  # (tw, th, dpr) 缓存失效判定键（DPR 一致）
         # Per-card fill colour (card background) — default mirrors the previous
         # hardcoded QColor(20, 24, 33, 165); overridden from config below.
         self._card_fill_color = QColor(20, 24, 33)
@@ -1044,6 +1053,20 @@ class _OverlayWindow(QWidget):
         self._slide_anim: Any = None
         self._sliding: bool = False
         self._transitioning: bool = False
+        # --- 页面转场（Phase 0 指示条 + Phase 1 快照位图）-------------------
+        # 详见 ui/page_transition.py 的模块文档。要点：转场期间真实 widget
+        # 一动不动，只在一个覆盖层上画两张页面快照，每帧成本 O(1)。
+        self._page_indicator: Any = None        # PageIndicator（页码条子控件）
+        self._page_transition: Any = None       # PageTransition（动画驱动器）
+        self._page_veil: Any = None             # TransitionVeil（转场覆盖层）
+        self._pending_old_snapshot: Any = None  # 旧页快照 QPixmap（转场待用）
+        self._pending_transition_dir: int = 1   # +1 新页从右进 / -1 从左进
+        # 转场「已置位但动画尚未结束」。rebuild() 的 finally 看到它会把
+        # 重建守卫 / 手柄轮询的复位延期到动画结束，避免 30ms 轮询在转场期间
+        # 去导航一张用户看不见的页面。
+        self._transition_active: bool = False
+        self._rebuild_deferred_ctrl: Any = None
+        self._rebuild_deferred_gp: bool = False
         self._hud_signature_open: Optional[str] = None
         # 独立浮动性能监控弹窗（全局唯一，由性能监控卡片右上角按钮切换）
         self._perfmon_popup: Any = None
@@ -1974,7 +1997,9 @@ class _OverlayWindow(QWidget):
         except Exception:
             self._card_bg_color = QColor(14, 17, 23)
         self._card_bg_image = str(image_path or "")
-        self._card_bg_pixmap = None  # force a lazy rebuild on next paint
+        # 强制下次 paint 重建缓存；同时清 key，保证基于 (tw,th,dpr) 的失效判定生效。
+        self._card_bg_pixmap = None
+        self._card_bg_pixmap_key = None
         self.update()
 
     def apply_card_fill(self, color_hex: str, alpha: int) -> None:
@@ -2264,9 +2289,12 @@ class _OverlayWindow(QWidget):
         """Paint the custom tray base: a solid colour, or a cover-scaled user
         image.  Falls back to the solid colour when the image is missing."""
         if self._card_bg_mode == "image" and self._card_bg_image:
+            # DPR 一致缓存失效判定：pixmap.width() 返回设备像素（已按 DPR 缩放），
+            # 不能直接拿它和逻辑像素 tw/th 比（DPR≠1 时永远不等 → 每帧重建 → 卡顿）。
+            # 改用显式 (tw, th, dpr) key，与 _layer_key 同一套路。
+            _dpr = max(1.0, float(self.devicePixelRatio()))
             if (self._card_bg_pixmap is None
-                    or self._card_bg_pixmap.width() != tw
-                    or self._card_bg_pixmap.height() != th):
+                    or self._card_bg_pixmap_key != (tw, th, _dpr)):
                 self._rebuild_card_bg_cache(tw, th)
             if self._card_bg_pixmap is not None and not self._card_bg_pixmap.isNull():
                 p.drawPixmap(tp.x(), tp.y(), self._card_bg_pixmap)
@@ -2311,12 +2339,14 @@ class _OverlayWindow(QWidget):
             pp.drawImage(QRect(0, 0, tw, th), scaled, QRect(sx, sy, dw, dh))
             pp.end()
             self._card_bg_pixmap = pm
+            self._card_bg_pixmap_key = (tw, th, dpr)
         else:
             # Invalid image -> no cached pixmap; the tray falls back to the
             # solid-colour base in _paint_card_bg_base (and we avoid reloading
             # a known-bad path every paint frame).
             pp.end()
             self._card_bg_pixmap = None
+            self._card_bg_pixmap_key = (tw, th, dpr)
 
     # -- battery --------------------------------------------------------
     def _update_battery(self) -> None:
@@ -3908,6 +3938,8 @@ class _OverlayWindow(QWidget):
         Used by a *full* rebuild (settings return / theme change / tile edit),
         never by a plain page switch.
         """
+        # 全量重建会销毁所有面板，未完成的转场快照随之失效，先取消掉。
+        self._cancel_page_transition()
         # Detach first so the layout no longer references widgets we are about
         # to deleteLater (otherwise the pending-deletion widgets linger in the
         # layout and the next addWidget stacks a ghost under the new page).
@@ -4240,9 +4272,18 @@ class _OverlayWindow(QWidget):
         finally:
             if _ctrl is not None:
                 try:
-                    _ctrl.set_rebuilding(False)
-                    if _was_gp_active:
-                        _ctrl.start_gamepad()
+                    if getattr(self, "_transition_active", False):
+                        # 页面转场进行中（_arm_page_transition 已置位）：
+                        # 守卫保持置位 + 手柄轮询保持暂停，由
+                        # _release_transition_guard() 在动画结束后统一复位。
+                        # 否则 30ms 轮询会在转场期间去导航一张用户看不见的
+                        # 页面（用户看到的是旧页快照，按 RB 却作用在新页上）。
+                        self._rebuild_deferred_ctrl = _ctrl
+                        self._rebuild_deferred_gp = _was_gp_active
+                    else:
+                        _ctrl.set_rebuilding(False)
+                        if _was_gp_active:
+                            _ctrl.start_gamepad()
                 except Exception:
                     pass
         _prof.mark("after_build")
@@ -4364,6 +4405,17 @@ class _OverlayWindow(QWidget):
             self._page_bar_buttons.append(b)
         lay.addStretch(1)
 
+        # Phase 0：页码滑动指示条。绝对定位在 bar 内、**不进布局**，
+        # 因此不会触发 relayout，也不占页码条高度（贴按钮底边内侧 3px）。
+        # 旧指示条是旧 bar 的子控件，会随 bar 的 deleteLater 一起销毁。
+        self._page_indicator = None
+        if total > 1:
+            try:
+                self._page_indicator = PageIndicator(bar)
+                self._page_indicator.sync(self._page_bar_buttons, cur)
+            except Exception:
+                self._page_indicator = None
+
         self._page_bar = bar
         # Insert just below the header (header is layout index 0).
         self.outer.insertWidget(1, bar)
@@ -4412,6 +4464,14 @@ class _OverlayWindow(QWidget):
                 b.setStyleSheet(cur_style if i == cur else normal_style)
             except Exception:
                 pass
+        # Phase 0：让指示条滑到新页按钮下方。页码条刚重建时 sync() 已经把它
+        # 摆在正确位置，此处 slide_to 会因位置相同而直接 no-op。
+        ind = getattr(self, "_page_indicator", None)
+        if ind is not None:
+            try:
+                ind.slide_to(cur)
+            except Exception:
+                pass
 
     def _refresh_page_bar(self) -> None:
         """Called on every (re)build: ensure the bar exists (rebuild only if the
@@ -4424,6 +4484,259 @@ class _OverlayWindow(QWidget):
         self._ensure_page_bar()
         self._highlight_current_page()
         self._apply_page_bar_visibility()
+
+    # -- 页面转场（Phase 0 指示条 + Phase 1 快照位图）----------------------
+    # 设计见 ui/page_transition.py 模块文档。铁律：转场不让真实 widget 动，
+    # 只在覆盖层上画两张快照；任何异常一律降级为现有硬切，绝不卡死。
+
+    def _transition_mode(self) -> str:
+        """当前转场模式："slide" / "fade" / "none"。读配置失败回落 slide。"""
+        try:
+            cfg = self._app.config_manager.config
+            m = str(getattr(cfg, "page_transition", "slide") or "slide").strip().lower()
+        except Exception:
+            return "slide"
+        return m if m in TRANSITION_MODES else "slide"
+
+    def _transition_ms(self) -> int:
+        """转场时长（ms），clamp 到 [0, 600]。0 等同于关闭动画。"""
+        try:
+            cfg = self._app.config_manager.config
+            ms = int(getattr(cfg, "transition_ms", DEFAULT_TRANSITION_MS))
+        except Exception:
+            return DEFAULT_TRANSITION_MS
+        return max(0, min(600, ms))
+
+    def _page_viewport_rect(self) -> Any:
+        """滚动视口在主窗坐标系中的矩形；取不到返回 None（降级为硬切）。"""
+        scroll = getattr(self, "_scroll", None)
+        if scroll is None:
+            return None
+        try:
+            vp = scroll.viewport()
+        except Exception:
+            return None
+        if vp is None or vp.width() <= 0 or vp.height() <= 0:
+            return None
+        try:
+            tl = vp.mapTo(self, QPoint(0, 0))
+        except Exception:
+            return None
+        return QRect(tl.x(), tl.y(), vp.width(), vp.height())
+
+    def _grab_page_snapshot(self) -> Any:
+        """抓取「用户此刻看到的页面区域」位图。
+
+        用**主窗口**的 ``grab(rect)`` 而不是 ``viewport.grab()``：页面底色、
+        卡片区背景、托盘描边都是主窗口 paintEvent 画的，视口自身并不画背景，
+        直接抓视口会得到一张透明底的图，转场时会透出下面的真实页面（重影）。
+        """
+        rect = self._page_viewport_rect()
+        if rect is None:
+            return None
+        try:
+            pm = self.grab(rect)
+        except Exception:
+            return None
+        return pm if (pm is not None and not pm.isNull()) else None
+
+    def _arm_page_transition(self) -> None:
+        """切页入口：抓旧页快照并置位转场意图（在旧页仍完整可见时调用）。
+
+        必须在 ``_on_page_switched`` 的最前面调用——此时旧页还没被 rebuild
+        换掉，布局稳定，抓到的快照是用户真正看到的内容。
+        """
+        self._pending_old_snapshot = None
+        self._pending_transition_dir = 1
+        # 按钮编辑器全页模式不转场（HUD 不重建，抓快照没有意义）。
+        if getattr(self, "_editor_all_pages", False):
+            return
+        if self._transition_mode() == "none" or self._transition_ms() <= 0:
+            return
+        try:
+            nav = getattr(self._app, "nav", None)
+            new_idx = int(nav.current_page) if nav is not None else 0
+        except Exception:
+            return
+        old_idx = int(getattr(self, "_current_page_idx", -1))
+        if old_idx < 0 or new_idx == old_idx:
+            return  # 首次显示 / 同页：不做转场
+        try:
+            total = max(1, len(self._app.render_pages()))
+        except Exception:
+            total = 1
+        if total <= 1:
+            return
+        # 环绕（末页 → 首页）时走「近路」，滑动方向与用户按键方向一致。
+        delta = new_idx - old_idx
+        if abs(delta) > total // 2:
+            delta = -delta
+        self._pending_transition_dir = 1 if delta > 0 else -1
+        pm = self._grab_page_snapshot()
+        if pm is None:
+            return
+        self._pending_old_snapshot = pm
+        # --- 立刻盖上「旧页盖罩」------------------------------------------
+        # 必须在 rebuild 之前铺上旧页快照：rebuild 与「抓新页快照 + 起动画」
+        # 分处两个事件循环 tick（中间夹着 singleShot(0)），那一帧窗口会把新页
+        # 真身合成出来 —— 就是「先跳到第二页、再瞬回第一页、然后才播动画」。
+        # 盖罩画面 = 旧页，与当前所见逐像素一致，因此盖上时用户无感。
+        self._show_transition_cover(pm)
+        # 置位「转场意图」。rebuild() 的 finally 看到它会把守卫/手柄的复位
+        # 延期到动画结束；下面这道保底定时器保证即使动画回调丢失也不会
+        # 让守卫永久置位（否则手柄彻底失灵）。
+        self._transition_active = True
+        QTimer.singleShot(self._transition_ms() + SAFETY_MARGIN_MS,
+                          self._page_transition_safety)
+
+    def _show_transition_cover(self, old_pm: Any) -> None:
+        """用旧页快照盖住页面可视区（转场第一阶段）。
+
+        只画旧页、进度恒为 0，画面与用户当前所见完全一致，所以盖上时无感；
+        它的作用是让随后的 rebuild（真实换页）发生在盖罩之下，不被合成出来。
+        """
+        try:
+            mode = self._transition_mode()
+            rect = self._page_viewport_rect()
+            if mode == "none" or rect is None:
+                return
+            self._teardown_veil()
+            veil = TransitionVeil(self, mode, old_pm, None,
+                                  getattr(self, "_pending_transition_dir", 1))
+            veil.setGeometry(rect)
+            veil.raise_()
+            veil.show()
+            # 强制立即绘制一次：show() 只是投递 UpdateRequest，而 singleShot(0)
+            # 的重建回调与它同属普通优先级事件，谁先被处理没有保证。若盖罩
+            # 晚于 rebuild 那一帧合成，新页真身仍会闪一帧出来。
+            veil.repaint()
+            self._page_veil = veil
+        except Exception:
+            pass
+
+    def _start_page_transition(self) -> None:
+        """抓新页快照 + 起动画。任何异常都静默降级为硬切（清场 + 复位守卫）。
+
+        时序关键点：盖罩（只含旧页快照的 veil）在 ``_arm_page_transition`` 里
+        就已经盖上。这里做的是 ① 临时 **隐藏** 盖罩 → ② 抓新页快照 → ③ 把新页
+        快照塞回同一个 veil 并重新显示 → ④ 起动画。①②③ 在同一个事件循环回调
+        内同步完成，中间不经过事件循环，因此不会被合成出「新页真身」的一帧。
+        """
+        old_pm = getattr(self, "_pending_old_snapshot", None)
+        self._pending_old_snapshot = None
+        started = False
+        try:
+            if old_pm is None or old_pm.isNull():
+                raise RuntimeError("no old snapshot")
+            mode = self._transition_mode()
+            rect = self._page_viewport_rect()
+            if mode == "none" or rect is None or not self.isVisible():
+                raise RuntimeError("transition disabled")
+            # 盖罩是 _arm_page_transition 建的。只隐藏、不销毁：抓完快照还要
+            # 复用同一个 veil，销毁会让新页真身露出至少一帧。
+            veil = getattr(self, "_page_veil", None)
+            if veil is not None:
+                veil.hide()
+            # 强制布局先落定：_show_page 只是 addWidget，布局要等事件循环才
+            # 重算；不激活就抓可能得到尚未布局（0 高度）的页面。
+            try:
+                lay = getattr(self, "inner_layout", None)
+                if lay is not None:
+                    lay.activate()
+            except Exception:
+                pass
+            new_pm = self._grab_page_snapshot()
+            if new_pm is None:
+                raise RuntimeError("no new snapshot")
+            if veil is None:
+                # 兜底：盖罩缺失（例如被全量重建 cancel 掉）时现建一个。
+                veil = TransitionVeil(self, mode, old_pm, new_pm,
+                                      getattr(self, "_pending_transition_dir", 1))
+                veil.setGeometry(rect)
+                self._page_veil = veil
+            else:
+                veil.set_new_pixmap(new_pm)
+            veil.raise_()
+            veil.show()
+            if self._page_transition is None:
+                self._page_transition = PageTransition(self)
+                self._page_transition.finished.connect(
+                    self._on_page_transition_finished)
+            self._page_transition.start(veil, self._transition_ms())
+            started = True
+        except Exception:
+            started = False
+        if not started:
+            # 走到这里说明转场没能起来（或中途抛异常）：必须拆掉盖罩 + 复位
+            # 守卫。少了这一步，页面会被旧页快照**永久**盖住。
+            self._finish_page_transition()
+
+    def _teardown_veil(self) -> None:
+        """销毁覆盖层并立刻释放两张快照（每张约 3MB）。"""
+        veil = getattr(self, "_page_veil", None)
+        self._page_veil = None
+        if veil is None:
+            return
+        try:
+            veil.release_pixmaps()
+            veil.hide()
+            veil.setParent(None)
+            veil.deleteLater()
+        except Exception:
+            pass
+
+    def _cancel_page_transition(self) -> None:
+        """取消未完成的转场（全量重建前调用，快照随面板销毁而失效）。
+
+        只清状态、**不动守卫本身**：守卫的复位留给 rebuild() 的 finally 走正常
+        路径，避免在 rebuild 进行中提前重启手柄轮询。
+        """
+        self._pending_old_snapshot = None
+        self._transition_active = False
+        self._rebuild_deferred_ctrl = None
+        self._rebuild_deferred_gp = False
+        tr = getattr(self, "_page_transition", None)
+        if tr is not None:
+            try:
+                tr.stop()
+            except Exception:
+                pass
+        self._teardown_veil()
+
+    def _finish_page_transition(self) -> None:
+        """转场收尾：拆覆盖层 + 释放位图 + 复位被延期的守卫 / 手柄轮询。"""
+        self._transition_active = False
+        tr = getattr(self, "_page_transition", None)
+        if tr is not None:
+            try:
+                tr.stop()
+            except Exception:
+                pass
+        self._teardown_veil()
+        self._release_transition_guard()
+
+    def _on_page_transition_finished(self) -> None:
+        self._finish_page_transition()
+
+    def _page_transition_safety(self) -> None:
+        """保底：动画回调万一丢失，强制收尾（守卫绝不能永久置位）。"""
+        if getattr(self, "_transition_active", False):
+            self._finish_page_transition()
+
+    def _release_transition_guard(self) -> None:
+        """复位 rebuild() 里被延期的守卫 / 手柄轮询（见 rebuild 的 finally）。"""
+        _ctrl = getattr(self, "_rebuild_deferred_ctrl", None)
+        _gp = getattr(self, "_rebuild_deferred_gp", False)
+        self._rebuild_deferred_ctrl = None
+        self._rebuild_deferred_gp = False
+        if _ctrl is None:
+            return
+        try:
+            _ctrl.set_rebuilding(False)
+            if _gp:
+                _ctrl.start_gamepad()
+        except Exception:
+            pass
 
     def _on_gp_connection_changed(self, connected: bool, name: str) -> None:
         """Update the header gamepad-status icon + tray tooltip when a
@@ -4501,6 +4814,11 @@ class _OverlayWindow(QWidget):
         # 切换页面时关闭疑惑解答弹窗，避免显示过时内容。
         if getattr(self, "_faq", None) is not None:
             self._faq.close()
+        # --- 页面转场 Phase 1：在旧页仍完整可见时抓快照 --------------------
+        # 必须放在任何 rebuild / repaint 之前：此刻旧页布局稳定，抓到的就是
+        # 用户看到的内容。抓成功会把 _transition_active 置位，rebuild() 的
+        # finally 据此把守卫复位延期到动画结束（见 _arm_page_transition）。
+        self._arm_page_transition()
         # 按钮编辑器全页模式（_editor_all_pages）：HUD 不重建（所有页面已实例化），
         # 但切页瞬间仍必须立即隐藏焦点框——否则黄框停在旧编辑器项/旧位置，
         # 要等 ~1s 的 sync_all 才被重新评估（延迟消失/越界残留）。
@@ -4511,7 +4829,7 @@ class _OverlayWindow(QWidget):
             _ctrl = getattr(self, "_controller", None)
             if _ctrl is not None:
                 try:
-                    _ctrl._rect.hide()
+                    _ctrl._hide_focus_rect()
                 except Exception:
                     pass
         else:
@@ -4543,9 +4861,9 @@ class _OverlayWindow(QWidget):
         if _ctrl is not None:
             try:
                 _ctrl.set_rebuilding(True)
-                # 切页瞬间立即隐藏焦点框，不等 singleShot(0) 重建（消除旧页残留一帧）。
+                # 切页瞬间立即隐藏焦点框（归零几何，根治残留长条），不等 singleShot(0) 重建。
                 # 此处只是把「从按下翻页到重建执行之间」那一个事件循环窗口的黄框可见性提前掐断。
-                _ctrl._rect.hide()
+                _ctrl._hide_focus_rect()
                 # 主 HUD 切页由随后的 rebind() 做这套复位；但按钮编辑器全页模式走
                 # sync_all 不调 rebind()，故这里把同样的复位补一遍，保证两条路径一致：
                 # 切页强制回卡片模式 + 清空陈旧活跃卡片索引，避免 refresh() 用旧页
@@ -4553,9 +4871,23 @@ class _OverlayWindow(QWidget):
                 _ctrl._card_mode = True
                 _ctrl._active_card = -1
                 _ctrl._card_focus = -1
+                # 同步清空扁平焦点索引 _focus：否则「按下翻页 → singleShot(0)
+                # 真正重建」之间的事件循环窗口里，1s 同步计时器 / sync_all
+                # 可能抢先 refresh()，用旧索引把黄框复活到旧页位置，造成
+                # 「页面已切、焦点框还在」的残留。编辑模式（布局编辑器内）保留
+                # _focus，由 refresh() 的 (card_token, col) 重解析继续跟随卡片。
+                if not _ctrl._edit_mode:
+                    _ctrl._focus = -1
                 _ctrl._apply_card_highlight()
             except Exception:
                 pass
+        # 立即重绘窗口，擦掉半透明无边框窗口上「黄框上一帧」的合成残影：
+        # hide() 只调度下一次绘制，DWM 已合成的当前帧仍含旧黄框，不强制
+        # repaint 一次用户就会看到「页面已切、黄框还在」的一帧延迟。
+        try:
+            self.repaint()
+        except Exception:
+            pass
         self._page_rebuild_pending = True
         QTimer.singleShot(0, self._do_page_rebuild)
 
@@ -4578,6 +4910,11 @@ class _OverlayWindow(QWidget):
             QTimer.singleShot(0, self._bridge.sync_all)
             return
         self.rebuild(restyle=False, reload_tiles=False, heavy=False)
+        # --- 页面转场 Phase 1：起动画 ---------------------------------------
+        # 再延一个 tick：让布局真正落定、新页完成一次绘制后再抓快照，
+        # 否则可能抓到尚未布局（0 高度）或半建状态的页面。
+        if getattr(self, "_pending_old_snapshot", None) is not None:
+            QTimer.singleShot(0, self._start_page_transition)
 
     def _apply_button_styles(self) -> None:
         """Push the active L2 style + bound L1 presets onto every live HUD button.

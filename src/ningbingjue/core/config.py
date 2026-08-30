@@ -71,6 +71,27 @@ def _safe_align(raw: object, default: str = "right") -> str:
     return "left" if s == "left" else "right"
 
 
+#: 合法页面转场模式。实现见 ui/page_transition.py。
+TRANSITION_MODES = ("slide", "fade", "none")
+
+
+def _normalize_transition_mode(raw: object, default: str = "slide") -> str:
+    """Coerce a page-transition mode to one of :data:`TRANSITION_MODES`.
+
+    Anything unknown (including a missing / empty value in an older
+    ``layout.json``) falls back to ``"slide"``.  ``"none"`` is the escape hatch
+    that restores the original hard-cut behaviour with zero animation code on
+    the page-switch path.
+
+    只接受 str：``None`` 若走 ``str(None)`` 会变成 ``"None"`` → ``"none"``，
+    等于把「字段缺失」误判成「用户主动关闭动画」。
+    """
+    if not isinstance(raw, str):
+        return default
+    s = raw.strip().lower()
+    return s if s in TRANSITION_MODES else default
+
+
 def _coerce_focus_opacity(raw: object, default: int = 25) -> int:
     """Coerce a saved focus-opacity value to int 0..100.
 
@@ -775,6 +796,13 @@ class AppConfig:
     # 卡片区外圈留白（px），即主页面 inner_layout 的 contentsMargins。
     # 8 = 显示「卡片区背景」边框；调小更贴边。
     card_outer_margin: int = 8
+    # -- 页面转场动画 ---------------------------------------------------
+    # 切页时的转场方式："slide" 横向滑动 / "fade" 交叉淡化 / "none" 关闭
+    # （走原硬切路径）。实现见 ui/page_transition.py：转场只绘制两张页面
+    # 快照位图，每帧成本 O(1)、与卡片数量无关；任何异常一律降级为硬切。
+    page_transition: str = "slide"
+    # 转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。
+    transition_ms: int = 180
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AppConfig":
@@ -794,6 +822,8 @@ class AppConfig:
         else:
             _tray_bw = 2 if bool(d.get("TrayBorder", True)) else 0
         _tray_bw = max(0, min(4, _tray_bw))
+        # 页面转场模式白名单化：非法值 / 旧配置缺字段一律回落 "slide"。
+        _page_transition = _normalize_transition_mode(d.get("PageTransition", "slide"))
         # 页面底色：只接受合法 6 位 hex（_safe_hex 校验字符合法性，P0-1 同款）；
         # 空/非法 = 跟随主题（存空串）。
         _page_bg = _safe_hex(d.get("PageBgColor", ""), "")
@@ -860,6 +890,9 @@ class AppConfig:
             # 主页面卡片排布（排版效果）。缺字段时回落默认 4 / 8。
             card_gap=max(0, _coerce_int(d.get("CardGap", 4) or 4, 4)),
             card_outer_margin=max(0, _coerce_int(d.get("CardOuterMargin", 8) or 8, 8)),
+            # 页面转场（见上方 _page_transition 的白名单处理）。
+            page_transition=_page_transition,
+            transition_ms=max(0, min(600, _coerce_int(d.get("TransitionMs", 180), 180))),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -912,6 +945,8 @@ class AppConfig:
             "CardFillAlpha": self.card_fill_alpha,
             "CardGap": max(0, int(self.card_gap)),
             "CardOuterMargin": max(0, int(self.card_outer_margin)),
+            "PageTransition": _normalize_transition_mode(self.page_transition),
+            "TransitionMs": max(0, min(600, int(getattr(self, "transition_ms", 180)))),
             "Input": self.input_config.to_dict(),
         }
 

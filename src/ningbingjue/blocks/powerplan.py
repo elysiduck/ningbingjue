@@ -27,6 +27,7 @@ import re
 import json
 import shutil
 import subprocess
+import threading
 import time
 import uuid
 import logging
@@ -339,7 +340,8 @@ class PowerPlanBlock:
     """电源计划管理区块（真实区块：持有计划列表 + powercfg 编排）。"""
 
     def __init__(self, config: "AppConfig", app: Any = None,
-                 plans_dir: str | None = None) -> None:
+                 plans_dir: str | None = None,
+                 probe_in_background: bool = False) -> None:
         self.config: "AppConfig" = config
         self.app = app  # Application 引用（用于 sync_all / save_all）
         # 预设 .pow 所在目录：默认与本模块同级的 powerplans/。
@@ -369,11 +371,53 @@ class PowerPlanBlock:
         self.diverged: bool = False
         # 首次 ensure 时未导入成功的预设计划（非管理员等），供 UI 提示。
         self.builtin_missing: list[str] = []
+        # 状态锁：后台启动探测线程与 UI 线程（切换/导入/refresh）都会写
+        # imported / active_* / selected_* 等状态；用 RLock——ensure 内部会调
+        # refresh，同线程重入必须放行。
+        self._state_lock = threading.RLock()
+        self.probe_ready = True
 
-        # 启动即尝试把 3 个预设计划导入系统（需管理员；非管理员则记录缺失）。
+        if probe_in_background:
+            # 启动耗时热点修复（2026-08-30，grill-me 打点取证）：__init__ 串行跑
+            # 5+ 条 powercfg 子进程（3×/query 存在性 + /list + /getactivescheme，
+            # 每条数百 ms），实测独占 3.82s = boot 最大热点。GUI 模式改为后台线程
+            # 探测：卡片先以空态上屏，主窗 1Hz sync_all 一秒内自然回填，无需跨线
+            # 程 UI 调用；用户切换/导入操作经 _state_lock 与探测线程串行化。
+            # headless / 单测保持默认 False（同步语义），既有测试不受影响。
+            self.probe_ready = False
+            threading.Thread(
+                target=self._boot_probe,
+                name="powerplan-boot-probe", daemon=True).start()
+        else:
+            self._boot_probe_sync()
+
+    # -- 启动期探测（同步 / 后台两态共用） ----------------------------
+    def _boot_probe_sync(self) -> None:
+        """同步探测：ensure 预设 → refresh 系统 → 载入并校验 selected_guid。"""
         self._ensure_builtin_plans()
         self.refresh()
-        # 载入上次用户主动选择的计划（跨重启持久化，用于 Q5 偏离显示）。
+        self._load_selected_guid()
+        self._validate_selected_guid()
+        self.probe_ready = True
+
+    def _boot_probe(self) -> None:
+        """后台线程版启动探测：逐步独立持锁，不长时间霸占锁拖慢 UI 操作。"""
+        try:
+            with self._state_lock:
+                self._ensure_builtin_plans()
+            with self._state_lock:
+                self.refresh()
+            with self._state_lock:
+                self._load_selected_guid()
+                self._validate_selected_guid()
+        except Exception as exc:  # noqa: BLE001 - 探测失败不致命，UI refresh 兜底
+            _log_powerplan(
+                f"[error] 启动后台探测失败（卡片空态待下次刷新）：{exc!r}")
+        finally:
+            self.probe_ready = True
+
+    def _load_selected_guid(self) -> None:
+        """载入上次用户主动选择的计划（跨重启持久化，用于 Q5 偏离显示）。"""
         try:
             sp = getattr(self.config.powerplan_config, "selected_guid", "")
             sn = getattr(self.config.powerplan_config, "selected_name", "")
@@ -381,9 +425,6 @@ class PowerPlanBlock:
             self.selected_name = str(sn).strip()
         except Exception:
             pass
-        # 清理/迁移持久化的 selected_guid（旧占位符 a1b2c3d4-* 或旧撞车 GUID 等失效
-        # 引用），避免卡片永久误报「你的选择 vs 系统实际」偏离。
-        self._validate_selected_guid()
 
     # -- 预设计划导入 ------------------------------------------------
     def _pow_path(self, filename: str) -> str:
@@ -603,31 +644,35 @@ class PowerPlanBlock:
         return builtins + self._user_plans()
 
     def refresh(self) -> None:
-        """重新探测系统中已导入的计划与当前活动方案。"""
-        rc, out = _run_powercfg(["/list"])
-        self.imported = _parse_list(out) if rc == 0 else []
-        # /getactivescheme 即便 rc!=0，也常在报错的同时把 GUID 打到 stdout
-        #（活动方案名被清空/半损坏时尤其常见）。因此不论 rc 如何都先尝试解析
-        # GUID，避免卡片永久显示无意义的「（未知）」。
-        rc2, aout = _run_powercfg(["/getactivescheme"])
-        self.active_guid = ""
-        self.active_name = ""
-        m = _SCHEME_RE.search(aout)
-        if m:
-            self.active_guid = m.group(1).strip().lower()
-            self.active_name = (m.group(2) or "").strip()
-        if not self.active_guid:
-            _log_powerplan(
-                f"[warn] 无法从 /getactivescheme 解析活动方案：rc2={rc2} "
-                f"out={aout!r}")
-        elif not self.active_name:
-            # 无名方案（幽灵态）：/getactivescheme 只回 GUID、不回名称——实测本机
-            # YMPerformance 幽灵态正是如此，卡片会显示成「（未知）」，用户完全
-            # 不知道自己正跑在哪个计划上。这里用内置命名表按 GUID 补回显示名。
-            self.active_name = self._name_for(self.active_guid)
-        # 系统实际与用户主动选择是否发散（Q5 偏离检测）。
-        self.diverged = bool(self.selected_guid) and self.selected_guid != self.active_guid
-        # 若活动方案不在我们的命名表里（例如系统「平衡」），仍保留其真实名称。
+        """重新探测系统中已导入的计划与当前活动方案。
+
+        持 _state_lock：与后台启动探测线程（probe_in_background）串行化对
+        imported / active_* 的写入；RLock 允许 ensure 强刷路径内同线程重入。"""
+        with self._state_lock:
+            rc, out = _run_powercfg(["/list"])
+            self.imported = _parse_list(out) if rc == 0 else []
+            # /getactivescheme 即便 rc!=0，也常在报错的同时把 GUID 打到 stdout
+            #（活动方案名被清空/半损坏时尤其常见）。因此不论 rc 如何都先尝试解析
+            # GUID，避免卡片永久显示无意义的「（未知）」。
+            rc2, aout = _run_powercfg(["/getactivescheme"])
+            self.active_guid = ""
+            self.active_name = ""
+            m = _SCHEME_RE.search(aout)
+            if m:
+                self.active_guid = m.group(1).strip().lower()
+                self.active_name = (m.group(2) or "").strip()
+            if not self.active_guid:
+                _log_powerplan(
+                    f"[warn] 无法从 /getactivescheme 解析活动方案：rc2={rc2} "
+                    f"out={aout!r}")
+            elif not self.active_name:
+                # 无名方案（幽灵态）：/getactivescheme 只回 GUID、不回名称——实测本机
+                # YMPerformance 幽灵态正是如此，卡片会显示成「（未知）」，用户完全
+                # 不知道自己正跑在哪个计划上。这里用内置命名表按 GUID 补回显示名。
+                self.active_name = self._name_for(self.active_guid)
+            # 系统实际与用户主动选择是否发散（Q5 偏离检测）。
+            self.diverged = bool(self.selected_guid) and self.selected_guid != self.active_guid
+            # 若活动方案不在我们的命名表里（例如系统「平衡」），仍保留其真实名称。
 
     # -- 切换 / 导入 / 删除 -----------------------------------------
     def _reimport_if_needed(self, guid: str) -> bool:

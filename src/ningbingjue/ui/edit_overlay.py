@@ -35,7 +35,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QPoint, QRect, QRectF, QSize, QThread, QEvent
+from PyQt6.QtCore import (Qt, QTimer, pyqtSignal, QPoint, QRect, QRectF, QSize,
+                          QThread, QEvent, QPropertyAnimation, QEasingCurve)
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -4285,7 +4286,8 @@ class LayoutEditPanel(QWidget):
         card_lay.setContentsMargins(6, 6, 6, 6)
         card_lay.setSpacing(0)
 
-        scroll = QScrollArea()
+        # 保留引用：抽屉高度动画期间要临时冻结它（见 _freeze_list）。
+        scroll = self._list_scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         apply_thin_scroll(scroll, always_on=False)
         self._list_inner = QWidget()
@@ -4328,7 +4330,7 @@ class LayoutEditPanel(QWidget):
         foot.setContentsMargins(0, 0, 0, 0)
 
         top_foot = QHBoxLayout()
-        top_foot.setSpacing(6)
+        top_foot.setSpacing(4)
         top_foot.setContentsMargins(0, 0, 0, 0)
         self._breath_btn = HintButton("呼吸灯")
         self._breath_btn.setStyleSheet(
@@ -4360,9 +4362,6 @@ class LayoutEditPanel(QWidget):
             "QPushButton:hover { background: rgba(93,202,165,0.30); }")
         self._xinput_gate_btn.clicked.connect(
             lambda _=False: self._overlay.open_xinput_gate())
-        top_foot.addWidget(self._breath_btn)
-        top_foot.addWidget(self._shortcut_edit_btn)
-        top_foot.addWidget(self._xinput_gate_btn)
         # 调试同步：进入掌机 ↔ 笔记本 源码/日志同步面板（开发测试用）。
         self._devsync_btn = HintButton("调试同步")
         self._devsync_btn.setStyleSheet(
@@ -4372,7 +4371,6 @@ class LayoutEditPanel(QWidget):
             "QPushButton:hover { background: rgba(143,208,255,0.30); }")
         self._devsync_btn.clicked.connect(
             lambda _=False: self._overlay.open_dev_sync())
-        top_foot.addWidget(self._devsync_btn)
         # 排版效果：进入「排版效果」子页，调整卡片间距 / 外圈边距并实时套用。
         self._layout_effect_btn = HintButton("排版效果")
         self._layout_effect_btn.setStyleSheet(
@@ -4382,7 +4380,6 @@ class LayoutEditPanel(QWidget):
             "QPushButton:hover { background: rgba(127,209,255,0.30); }")
         self._layout_effect_btn.clicked.connect(
             lambda _=False: self._overlay.open_layout_effect())
-        top_foot.addWidget(self._layout_effect_btn)
         # 主题与蒙版：底板 / 单卡 / 编辑蒙版统一编辑入口（2026-08-30 新增）。
         self._theme_mask_btn = HintButton("主题与蒙版")
         self._theme_mask_btn.setStyleSheet(
@@ -4392,8 +4389,57 @@ class LayoutEditPanel(QWidget):
             "QPushButton:hover { background: rgba(255,120,120,0.30); }")
         self._theme_mask_btn.clicked.connect(
             lambda _=False: self._overlay.open_theme_mask())
-        top_foot.addWidget(self._theme_mask_btn)
-        top_foot.addStretch(1)
+        # 底部 6 个次级按钮不再固定平铺：屏宽不足时低优先按钮移入「更多」抽屉
+        # （方案 E 响应式布局）。实际落位由 _reflow_footer() 在 resize 时计算。
+        self._more_btn = HintButton("更多 ▾")
+        self._more_btn.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.10); color: #dfe6f0;"
+            " border: none; border-radius: 6px;"
+            " padding: 7px 14px; font-size: 11px; font-weight: bold; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.18); }")
+        self._more_btn.clicked.connect(lambda _=False: self._toggle_drawer())
+        self._more_btn.setVisible(False)
+        # 抽屉容器：放不下的低优先按钮在此竖排（内嵌面板，非弹窗）。
+        self._drawer = QWidget()
+        self._drawer.setStyleSheet(
+            "QWidget { background: rgba(255,255,255,0.04);"
+            " border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; }")
+        self._drawer_lay = QVBoxLayout(self._drawer)
+        self._drawer_lay.setContentsMargins(6, 6, 6, 6)
+        self._drawer_lay.setSpacing(4)
+        # 抽屉展开/收起动画（方案 A）：动画 maximumHeight，抽屉**留在布局流里**，
+        # 展开时挤压上方卡片列表区腾出空间 —— 不遮挡「保存/取消」、也不会溢出
+        # 窗口底部（foot 就在面板最底部，向下浮层放不下 110-175px 的抽屉）。
+        # 最小高度必须置 0，否则动画无法把抽屉压到完全收起。
+        self._drawer.setMinimumHeight(0)
+        self._drawer.setMaximumHeight(0)
+        self._drawer.setVisible(False)
+        # 动画对象必须挂在 self 上保引用：局部变量会被 GC，动画静默不跑。
+        self._drawer_anim: Any = None
+        # 动画目标高度（展开态），由 _drawer_target_height() 每次实时算。
+        # 响应式收起状态（初始全常驻，首帧 resize 后由 _reflow_footer 重算）。
+        self._top_foot = top_foot
+        self._foot_gap = 4
+        # 优先级（值小=重要，最晚被收起）；_footer_order 按优先级降序。
+        self._footer_order = [
+            self._breath_btn,        # 1 呼吸灯
+            self._theme_mask_btn,    # 2 主题与蒙版
+            self._shortcut_edit_btn, # 3 快捷键
+            self._layout_effect_btn, # 4 排版效果
+            self._xinput_gate_btn,   # 5 手柄间隔
+            self._devsync_btn,       # 6 调试同步
+        ]
+        self._footer_confirm = {
+            self._breath_btn: lambda: self._overlay.open_breathing(),
+            self._shortcut_edit_btn: lambda: self._overlay.open_shortcut(),
+            self._xinput_gate_btn: lambda: self._overlay.open_xinput_gate(),
+            self._devsync_btn: lambda: self._overlay.open_dev_sync(),
+            self._layout_effect_btn: lambda: self._overlay.open_layout_effect(),
+            self._theme_mask_btn: lambda: self._overlay.open_theme_mask(),
+        }
+        self._visible_footer: list = list(self._footer_order)
+        self._drawer_buttons: list = []
+        self._drawer_open = False
 
         bot_foot = QHBoxLayout()
         bot_foot.setSpacing(6)
@@ -4432,6 +4478,7 @@ class LayoutEditPanel(QWidget):
         bot_foot.addWidget(self._cancel_btn)
 
         foot.addLayout(top_foot)
+        foot.addWidget(self._drawer)
         foot.addLayout(bot_foot)
         root.addLayout(foot)
 
@@ -4875,10 +4922,10 @@ class LayoutEditPanel(QWidget):
             next_page.setEnabled(False)
         # ②.5：鼠标点行内按钮 = 进入卡片内层（焦点移到该卡位置按钮）再执行移动，
         # 使随后手柄方向键在内层（↑/↓/▲/▼）导航，与「点击进入」一致。
-        up.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, -1))
-        down.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, 1))
-        prev_page.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, "prev"))
-        next_page.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, "next"))
+        up.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, -1, 1))
+        down.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, 1, 2))
+        prev_page.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, "prev", 3))
+        next_page.clicked.connect(lambda _=False, p=pos, tt=t: self._enter_inner_then(tt, p, "next", 4))
         lay.addWidget(up)
         lay.addWidget(down)
         lay.addWidget(prev_page)
@@ -4946,10 +4993,19 @@ class LayoutEditPanel(QWidget):
                 pass
 
     def _hide_focus_rect(self) -> None:
-        """重建行之前收起焦点框，避免新行几何未算完时焦点框残留在旧位置或左上角。"""
+        """重建行之前收起焦点框，避免新行几何未算完时焦点框残留在旧位置或左上角。
+        转调 controller 的归零版（隐藏 + 几何 0 + 清 hint），避免焦点框保留旧尺寸
+        在退出编辑器/切页后画成错位长条。"""
         ctrl = getattr(self._overlay, "_controller", None)
         if ctrl is None:
             return
+        fn = getattr(ctrl, "_hide_focus_rect", None)
+        if callable(fn):
+            try:
+                fn()
+                return
+            except Exception:
+                pass
         rect = getattr(ctrl, "_rect", None)
         if rect is not None:
             try:
@@ -5002,9 +5058,12 @@ class LayoutEditPanel(QWidget):
             except Exception:
                 pass
 
-    def _enter_inner_then(self, t: str, p: int, delta) -> None:
-        """鼠标点行内按钮：先进入内层，再执行该按钮的移动动作。"""
-        self._enter_inner(t, 1)
+    def _enter_inner_then(self, t: str, p: int, delta, col: int = 1) -> None:
+        """鼠标/手柄点行内按钮：先进入内层（焦点落到**被点按钮**所在列），
+        再执行该按钮的移动动作。col 必须与被点按钮一致（↑=1 / ↓=2 / ▲=3 / ▼=4），
+        否则重建后 refresh() 按 (card_token, col) 重摆焦点会落到错误按钮——
+        旧实现恒传 col=1（↑），导致点 ↓ 后光标跳回 ↑（卡片下移、光标却停在上移键）。"""
+        self._enter_inner(t, col)
         if delta == "prev":
             self._move_to_prev_page(p)
         elif delta == "next":
@@ -5202,19 +5261,19 @@ class LayoutEditPanel(QWidget):
             items.append(NavItem(
                 w._up, "action", card_token=t, row=r, col=1,
                 confirm=lambda _b=w._up, _t=t, _p=p, _d=-1:
-                    self._enter_inner_then(_t, _p, _d)))
+                    self._enter_inner_then(_t, _p, _d, 1)))
             items.append(NavItem(
                 w._down, "action", card_token=t, row=r, col=2,
                 confirm=lambda _b=w._down, _t=t, _p=p, _d=1:
-                    self._enter_inner_then(_t, _p, _d)))
+                    self._enter_inner_then(_t, _p, _d, 2)))
             items.append(NavItem(
                 w._prev, "action", card_token=t, row=r, col=3,
                 confirm=lambda _b=w._prev, _t=t, _p=p, _d="prev":
-                    self._enter_inner_then(_t, _p, _d)))
+                    self._enter_inner_then(_t, _p, _d, 3)))
             items.append(NavItem(
                 w._next, "action", card_token=t, row=r, col=4,
                 confirm=lambda _b=w._next, _t=t, _p=p, _d="next":
-                    self._enter_inner_then(_t, _p, _d)))
+                    self._enter_inner_then(_t, _p, _d, 4)))
             r += 1
         # 按钮风格编辑：独占一行（row r），col0。
         items.append(NavItem(
@@ -5222,32 +5281,278 @@ class LayoutEditPanel(QWidget):
             confirm=lambda: self._overlay.open_button(), hint="A",
             row=r, col=0))
         r += 1
-        # 页脚横幅（row r）：6 个次级入口按钮，按视觉左右排成 cols 0..5。
-        items.append(NavItem(self._breath_btn, "action",
-                             confirm=lambda: self._overlay.open_breathing(),
-                             hint="A", row=r, col=0))
-        items.append(NavItem(self._shortcut_edit_btn, "action",
-                             confirm=lambda: self._overlay.open_shortcut(),
-                             hint="A", row=r, col=1))
-        items.append(NavItem(self._xinput_gate_btn, "action",
-                             confirm=lambda: self._overlay.open_xinput_gate(),
-                             hint="A", row=r, col=2))
-        items.append(NavItem(self._devsync_btn, "action",
-                             confirm=lambda: self._overlay.open_dev_sync(),
-                             hint="A", row=r, col=3))
-        items.append(NavItem(self._layout_effect_btn, "action",
-                             confirm=lambda: self._overlay.open_layout_effect(),
-                             hint="A", row=r, col=4))
-        items.append(NavItem(self._theme_mask_btn, "action",
-                             confirm=lambda: self._overlay.open_theme_mask(),
-                             hint="A", row=r, col=5))
-        r += 1
-        # 保存 / 取消（row r），Y/B 常驻。
+        # 页脚横幅（row r）：响应式——仅常驻可见按钮进导航；放不下的低优先
+        # 按钮移入「更多」抽屉（见 _reflow_footer / _toggle_drawer）。
+        col = 0
+        for _b in self._visible_footer:
+            items.append(NavItem(_b, "action",
+                                 confirm=self._footer_confirm[_b],
+                                 hint="A", row=r, col=col))
+            col += 1
+        if self._drawer_buttons:
+            items.append(NavItem(self._more_btn, "action",
+                                 confirm=self._toggle_drawer, hint="A",
+                                 row=r, col=col))
+            col += 1
+        # 抽屉展开时，其内部按钮作为独立一行（r+1），方向键上下可进出。
+        if self._drawer_open and self._drawer_buttons:
+            _drow = r + 1
+            for _j, _b in enumerate(self._drawer_buttons):
+                items.append(NavItem(_b, "action",
+                                     confirm=self._footer_confirm[_b],
+                                     hint="A", row=_drow, col=_j))
+            _srow = r + 2
+        else:
+            _srow = r + 1
+        # 保存 / 取消（_srow），Y/B 常驻。
         items.append(NavItem(self._save_btn, "action",
-                             confirm=self._save, hint="Y", row=r, col=0))
+                             confirm=self._save, hint="Y", row=_srow, col=0))
         items.append(NavItem(self._cancel_btn, "action",
-                             confirm=self._cancel, hint="B", row=r, col=1))
+                             confirm=self._cancel, hint="B", row=_srow, col=1))
         return items
+
+    # -- 响应式页脚（方案 E：常驻个数随宽度，放不下→更多抽屉） ----------
+    def _reflow_footer(self) -> None:
+        """按当前屏宽贪心收起 6 个次级按钮：放得下的高优先按钮常驻，
+        放不下的低优先按钮移入抽屉。须等布局有宽度后再测（width>0）。"""
+        if not hasattr(self, "_footer_order"):
+            return
+        if self.width() <= 0:
+            return
+        # 重排会增删抽屉里的按钮，动画中途被打断会让高度与内容不符 → 先停掉
+        # 动画（不 snap：末尾的 _apply_drawer_visual() 会把高度设为终态）。
+        self._stop_drawer_anim()
+        avail = self.width() - 16  # root 左右边距各 8
+        gap = self._foot_gap
+        more_w = self._more_btn.sizeHint().width()
+        widths = {b: b.sizeHint().width() for b in self._footer_order}
+        cand = list(self._footer_order)  # 优先级降序
+        # 从最低优先逐个移除，直到整行（含「更多」）放得下，至少留 1 个常驻。
+        while len(cand) > 1:
+            need_more = len(cand) < len(self._footer_order)
+            total = sum(widths[b] for b in cand) + gap * max(0, len(cand) - 1)
+            if need_more:
+                total += gap + more_w
+            if total <= avail:
+                break
+            cand.pop()  # 去掉最低优先
+        # 落回布局：先全部清出两个容器，再按新状态归位。
+        for b in self._footer_order:
+            self._top_foot.removeWidget(b)
+            self._drawer_lay.removeWidget(b)
+        self._top_foot.removeWidget(self._more_btn)
+        while self._top_foot.count():
+            self._top_foot.takeAt(0)
+        for b in cand:
+            self._top_foot.addWidget(b)
+        if len(cand) < len(self._footer_order):
+            self._top_foot.addWidget(self._more_btn)
+        self._top_foot.addStretch(1)
+        self._drawer_buttons = [b for b in self._footer_order if b not in cand]
+        for b in self._drawer_buttons:
+            self._drawer_lay.addWidget(b)
+        self._visible_footer = cand
+        self._apply_drawer_visual()
+
+    def _apply_drawer_visual(self) -> None:
+        """依据当前状态切换「更多」与抽屉容器的可见性 / 高度终态。
+
+        用于**非动画**路径（页脚重排等）：直接把高度设为终态。动画路径走
+        :meth:`_animate_drawer`，不要在这里设高度，否则会与动画抢值。"""
+        has = bool(self._drawer_buttons)
+        self._more_btn.setVisible(has)
+        self._drawer.setVisible(has and self._drawer_open)
+        try:
+            self._drawer.setMaximumHeight(
+                self._drawer_target_height() if (has and self._drawer_open) else 0)
+        except Exception:
+            pass
+
+    def _toggle_drawer(self) -> None:
+        """鼠标点击 / 手柄 A 在「更多」上：带高度动画地展开或收起抽屉。"""
+        if not self._drawer_buttons:
+            return
+        self._drawer_open = not self._drawer_open
+        # 收起前把焦点移回「更多」按钮：抽屉按钮的 NavItem 不带 card_token，
+        # 收起后 refresh() 无法按 (card_token, col) 重新解析它们，焦点会落到
+        # 一个失效的扁平索引上（表现为光标乱跳）。先归位到「更多」即可。
+        if not self._drawer_open:
+            ctrl = getattr(self._overlay, "_controller", None)
+            if ctrl is not None and hasattr(ctrl, "_items"):
+                try:
+                    for _i, _it in enumerate(ctrl._items):
+                        if _it.widget is self._more_btn:
+                            ctrl.set_focus(_i)
+                            break
+                except Exception:
+                    pass
+        # 可见性：展开要**立刻**显示（动画从 0 高度撑开，得先看得见）；
+        # 收起则**不能立刻隐藏**——否则 widget 瞬间消失，动画虽然跑了却看不
+        # 见，表现为「只有展开有动画、收起是瞬间消失」。收起的隐藏交由
+        # _settle_drawer_after_anim() 在高度压到 0 之后执行。
+        if self._drawer_open:
+            self._drawer.setVisible(True)
+        self._animate_drawer(self._drawer_open)
+
+    # -- 抽屉展开 / 收起动画（方案 A：动画 maximumHeight，留在布局流） ------
+    _DRAWER_ANIM_MS = 170
+
+    def _drawer_target_height(self) -> int:
+        """展开态应有的高度：按钮竖排累加 + 间距 + 内边距。
+
+        手动算而**不用** ``sizeHint()``：抽屉此刻可能被压到 maximumHeight=0 或
+        处于隐藏态，布局尚未激活时 sizeHint 会返回不可靠的值，据此做的动画会
+        算出错误高度。按钮自身的 sizeHint 只依赖字体度量，与可见性无关，可靠。
+        """
+        try:
+            lay = self._drawer_lay
+            m = lay.contentsMargins()
+            h = m.top() + m.bottom()
+            if not self._drawer_buttons:
+                return max(0, h)
+            for b in self._drawer_buttons:
+                h += max(0, b.sizeHint().height())
+            h += lay.spacing() * max(0, len(self._drawer_buttons) - 1)
+            return max(0, h)
+        except Exception:
+            return 0
+
+    def _freeze_list(self, freeze: bool) -> None:
+        """抽屉动画期间冻结卡片列表滚动区，避免每帧重排卡片行。
+
+        抽屉高度动画每帧都会让 ``_list_card`` 变矮，而它内部的 QScrollArea
+        开着 ``widgetResizable=True`` —— 视口高度一变，Qt 就把内容 widget 重新
+        resize 并**重排所有卡片行**，这正是「略微掉帧」的来源。动画期间临时
+        关掉 widgetResizable，内容保持原尺寸不再重排，动画结束再恢复。
+
+        只改高度、不改宽度，因此不会出现宽度方向的不适配。若上机发现列表区
+        有跳动，把 ``_animate_drawer`` 里的 ``self._freeze_list(True)`` 注释掉
+        即可回退（功能不受影响，仅回到掉帧状态）。
+        """
+        scroll = getattr(self, "_list_scroll", None)
+        if scroll is None:
+            return
+        try:
+            scroll.setWidgetResizable(not freeze)
+            if not freeze:
+                inner = getattr(self, "_list_inner", None)
+                if inner is not None:
+                    inner.updateGeometry()
+        except Exception:
+            pass
+
+    def _stop_drawer_anim(self, snap: bool = False) -> None:
+        """停止抽屉动画。
+
+        ``snap=True`` 时把抽屉高度直接跳到当前状态的终态（展开=目标高 /
+        收起=0）。用于 resize、页脚重排、退出编辑器等**中断**场景，避免抽屉
+        卡在动画中途的高度——这与焦点框残留是同一类问题。
+        """
+        anim = getattr(self, "_drawer_anim", None)
+        if anim is not None:
+            try:
+                anim.stop()
+            except Exception:
+                pass
+            self._drawer_anim = None
+        # 中断动画时务必解冻列表，否则卡片行会一直不跟随视口宽度变化。
+        self._freeze_list(False)
+        if snap:
+            try:
+                self._drawer.setMaximumHeight(
+                    self._drawer_target_height() if self._drawer_open else 0)
+                # 收起态被打断时补一次隐藏，否则抽屉会停在「可见但高度 0」的
+                # 中间态，下次展开前一直占着一个空 widget。
+                if not self._drawer_open:
+                    self._drawer.setVisible(False)
+            except Exception:
+                pass
+
+    def _settle_drawer_after_anim(self) -> None:
+        """动画结束（或动画不可用）：固定终态高度 + 重摆焦点框。
+
+        焦点框的重摆必须放在这里而不是动画前——动画期间抽屉按钮几何在变，
+        焦点框若落在抽屉里会跟着抖；先归零隐藏、动画结束再摆一次即可。"""
+        self._drawer_anim = None
+        # 解冻卡片列表，让内容重新跟随视口（必须在下面 refresh() 之前，
+        # 否则列表区还停在冻结尺寸，焦点框会按旧几何摆放）。
+        self._freeze_list(False)
+        try:
+            self._drawer.setMaximumHeight(
+                self._drawer_target_height() if self._drawer_open else 0)
+            if not self._drawer_open:
+                self._drawer.setVisible(False)
+        except Exception:
+            pass
+        ctrl = getattr(self._overlay, "_controller", None)
+        if ctrl is None:
+            return
+        try:
+            ctrl.refresh()
+            if self._drawer_open and self._drawer_buttons:
+                # 展开后把焦点移入抽屉第一个按钮
+                for _i, _it in enumerate(ctrl._items):
+                    if _it.widget is self._drawer_buttons[0]:
+                        ctrl.set_focus(_i)
+                        break
+        except Exception:
+            pass
+
+    def _animate_drawer(self, opening: bool) -> None:
+        """用 QPropertyAnimation 动画抽屉高度（当前值 ↔ 目标高 / 0）。
+
+        抽屉**留在布局流里**：高度变化会挤压上方卡片列表区（stretch=1）腾出
+        空间，因此不遮挡「保存 / 取消」、也不溢出窗口底部。代价是每帧触发
+        foot + root 重新布局，故时长压在 170ms（约 10 帧）。
+        """
+        target = self._drawer_target_height()
+        if target <= 0:
+            # 拿不到高度（尚未布局 / 无按钮）→ 退回瞬间显隐，避免动画用错值。
+            self._settle_drawer_after_anim()
+            return
+        self._stop_drawer_anim()
+        try:
+            cur = max(0, int(self._drawer.maximumHeight()))
+        except Exception:
+            cur = 0
+        # 焦点框在动画期间**保持可见**，不再隐藏：
+        # 此刻焦点停在「更多」按钮上，它位于 top_foot —— 而 foot 的顺序是
+        # top_foot / drawer / bot_foot，抽屉高度变化只推动**下方**的 bot_foot，
+        # top_foot 位置纹丝不动，所以焦点框既不会抖、也不需要重摆。
+        # 之前这里会先归零隐藏、等动画结束再摆，中间 170ms 的空档正是用户看到
+        # 的「光标延迟 / 闪一下」。收起路径同理（焦点已先归位到「更多」按钮）。
+        # 冻结卡片列表：抽屉每帧变高会让 _list_card 变矮，其 QScrollArea
+        # (widgetResizable=True) 会重排所有卡片行 —— 这是掉帧的主因。
+        self._freeze_list(True)
+        try:
+            anim = QPropertyAnimation(self._drawer, b"maximumHeight", self)
+            anim.setDuration(self._DRAWER_ANIM_MS)
+            # PyQt6 要求完整枚举限定：必须 QEasingCurve.Type.OutCubic，
+            # 简写 OutCubic 会抛 AttributeError 并被下方 except 吞掉 →
+            # 动画静默退化成瞬间显隐（与 page_transition/faq_popup 保持一致）。
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.setStartValue(cur)
+            anim.setEndValue(target if opening else 0)
+            # 必须保引用：局部变量动画对象会被 GC，动画静默不跑。
+            self._drawer_anim = anim
+            anim.finished.connect(self._settle_drawer_after_anim)
+            anim.start()
+        except Exception:
+            # 动画不可用 / 异常 → 退回瞬间显隐，功能不受影响。
+            self._settle_drawer_after_anim()
+
+    def resizeEvent(self, ev: Any) -> None:  # noqa: N802 - Qt camelCase
+        super().resizeEvent(ev)
+        # resize 会重算页脚；动画若在中途被打断，抽屉高度会与布局错乱 →
+        # 立即跳到终态（snap）再重排。
+        self._stop_drawer_anim(snap=True)
+        self._reflow_footer()
+
+    def hideEvent(self, ev: Any) -> None:  # noqa: N802 - Qt camelCase
+        # 退出编辑器 / 切到别的编辑页时停掉抽屉动画并跳到终态，避免下次进来
+        # 抽屉卡在动画中途的高度（与焦点框残留是同一类问题）。
+        self._stop_drawer_anim(snap=True)
+        super().hideEvent(ev)
 
 class _EditCard(QFrame):
     """A titled rounded card used inside the editors (mirrors the original's
@@ -7110,6 +7415,41 @@ class _TMPresetRow(QWidget):
         return self._custom_btn
 
 
+class _PathLabel(QLabel):
+    """响应式路径标签：宽度随行内剩余空间收缩，resize 时中段省略重绘。
+
+    修复：原 ``setFixedWidth(210)`` + 两按钮的最小宽度在窄 HUD 窗口（360px 级）
+    下超过内容宽；而滚动区水平滚动条关闭，子控件溢出窗口右外侧被裁切/不可点。
+    这里用 ``Ignored`` 尺寸策略让标签吃剩余空间（按钮占自然宽），并在
+    ``resizeEvent`` 里按实际宽度重做中段省略，单行永不撑宽窗口。
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._full = ""
+        self.setStyleSheet("color: #aeb9c9; font-size: 10px;")
+        self.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(20)
+
+    def set_path(self, full: str) -> None:
+        self._full = full or "（未选择图片）"
+        self._elide()
+
+    def _elide(self) -> None:
+        if self.width() <= 0:
+            # 首次布局尚未确定宽度：先放原文，resizeEvent 会补一次省略。
+            self.setText(self._full)
+            return
+        fm = self.fontMetrics()
+        self.setText(fm.elidedText(
+            self._full, Qt.TextElideMode.ElideMiddle, self.width()))
+
+    def resizeEvent(self, ev: Any) -> None:  # noqa: N802 - Qt override
+        super().resizeEvent(ev)
+        self._elide()
+
+
 class ThemeMaskPanel(QWidget):
     """「主题与蒙版」——把散落在 LayoutEditPanel（卡片区背景 / 替换底色 / 单卡填充 /
     编辑蒙版）与 LayoutEffectPanel（外圈留白）里的 5 块页面外观设置统一收进一个
@@ -7144,10 +7484,19 @@ class ThemeMaskPanel(QWidget):
         # 托盘颜色/透明度/模糊/外框线宽度/外圈留白/自定义背景）。托盘四件套
         # 同样从 breath 现读（呼吸灯自定义页改过也能跟上），缺省回落 cfg。
         _cfgv = getattr(app.config_manager, "config", None)
-        self._card_bg_enabled = bool(getattr(breath, "_card_bg_enabled", False))
-        self._card_bg_mode = str(getattr(breath, "_card_bg_mode", "solid") or "solid")
-        self._card_bg_color_hex = str(getattr(breath, "_card_bg_color_hex", "") or "")
-        self._card_bg_image = str(getattr(breath, "_card_bg_image", "") or "")
+        # 单一真值源 = config：config 已经在每次 apply_* 实时写入，且落盘。
+        # 旧实现从 breath._card_bg_* 读，但 breathing 面板从未在启动后把这些
+        # 字段从 config 加载进内存 → 永远 False → 重启后开关误显示「关闭」。
+        # 这里改读 config，并镜像回 breath 让 mini-HUD 预览也正确。
+        self._card_bg_enabled = bool(getattr(_cfgv, "card_bg_enabled", False))
+        self._card_bg_mode = str(getattr(_cfgv, "card_bg_mode", "solid") or "solid")
+        self._card_bg_color_hex = str(getattr(_cfgv, "card_bg_color", "") or "")
+        self._card_bg_image = str(getattr(_cfgv, "card_bg_image", "") or "")
+        _b = breath
+        _b._card_bg_enabled = self._card_bg_enabled
+        _b._card_bg_mode = self._card_bg_mode
+        _b._card_bg_color_hex = self._card_bg_color_hex
+        _b._card_bg_image = self._card_bg_image
         self._card_fill_hex = str(getattr(breath, "_card_fill_hex", "") or "")
         self._card_fill_alpha = int(getattr(breath, "_card_fill_alpha", 165) or 165)
         self._editor_dim_alpha = int(getattr(breath, "_editor_dim_alpha", 118) or 118)
@@ -7417,13 +7766,10 @@ class ThemeMaskPanel(QWidget):
         ex.setSpacing(6)
         img_row = QHBoxLayout()
         img_row.setSpacing(6)
-        img_lbl = QLabel("")
-        img_lbl.setStyleSheet("color: #aeb9c9; font-size: 10px;")
-        # 锁宽：长路径曾把整个滚动内容区撑宽（页面变长/横向滚动条）。
-        # 中段省略显示，完整路径放 tooltip。
-        img_lbl.setFixedWidth(210)
+        # 响应式路径标签：随剩余空间收缩，resize 时中段省略，单行永不撑宽窗口。
+        img_lbl = _PathLabel()
         self._card_bg_image_lbl = img_lbl
-        self._set_card_bg_path_label(self._card_bg_image)
+        img_lbl.set_path(self._card_bg_image)
         img_row.addWidget(img_lbl, 1)
         img_btn = QPushButton("选择图片...")
         img_btn.setStyleSheet(_tm_btn_style())
@@ -7512,17 +7858,16 @@ class ThemeMaskPanel(QWidget):
         self._push_card_bg()
 
     def _set_card_bg_path_label(self, path: str) -> None:
-        """路径标签锁宽显示：中段省略，完整路径放 tooltip。
+        """路径标签响应式显示：中段省略，完整路径放 tooltip。
 
-        修复：长路径曾把整个滚动内容区撑宽（页面变长 + 横向滚动条）。
+        标签为 ``_PathLabel``，省略宽度随控件实际宽度变化（resizeEvent 内重做），
+        因此长路径不会再撑宽窗口。
         """
         lbl = getattr(self, "_card_bg_image_lbl", None)
         if lbl is None:
             return
-        full = path or "（未选择图片）"
-        fm = lbl.fontMetrics()
-        lbl.setText(fm.elidedText(full, Qt.TextElideMode.ElideMiddle, 200))
-        lbl.setToolTip(full)
+        lbl.set_path(path)
+        lbl.setToolTip(path or "（未选择图片）")
 
     def _pick_card_bg_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -7680,10 +8025,17 @@ class ThemeMaskPanel(QWidget):
     def refresh(self) -> None:
         """从源面板重新现读（用户在旧面板改过后回本页时保持一致）。"""
         _cfgv = getattr(self._app.config_manager, "config", None)
-        self._card_bg_enabled = bool(getattr(self._breath, "_card_bg_enabled", False))
-        self._card_bg_mode = str(getattr(self._breath, "_card_bg_mode", "solid") or "solid")
-        self._card_bg_color_hex = str(getattr(self._breath, "_card_bg_color_hex", "") or "")
-        self._card_bg_image = str(getattr(self._breath, "_card_bg_image", "") or "")
+        # 同 __init__：card_bg_* 单一真值源 = config（breath 未从 config 加载，
+        # 不能作为开关初值；这里读 config 后镜像回 breath 供预览）。
+        self._card_bg_enabled = bool(getattr(_cfgv, "card_bg_enabled", False))
+        self._card_bg_mode = str(getattr(_cfgv, "card_bg_mode", "solid") or "solid")
+        self._card_bg_color_hex = str(getattr(_cfgv, "card_bg_color", "") or "")
+        self._card_bg_image = str(getattr(_cfgv, "card_bg_image", "") or "")
+        _b = self._breath
+        _b._card_bg_enabled = self._card_bg_enabled
+        _b._card_bg_mode = self._card_bg_mode
+        _b._card_bg_color_hex = self._card_bg_color_hex
+        _b._card_bg_image = self._card_bg_image
         self._card_fill_hex = str(getattr(self._breath, "_card_fill_hex", "") or "")
         self._card_fill_alpha = int(getattr(self._breath, "_card_fill_alpha", 165) or 165)
         self._editor_dim_alpha = int(getattr(self._breath, "_editor_dim_alpha", 118) or 118)

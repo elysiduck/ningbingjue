@@ -245,6 +245,14 @@ class InteractionController(QObject):
         fc = getattr(config, "focus_color", "e6ff1e") if config else "e6ff1e"
         fo = getattr(config, "focus_opacity", 25) if config else 25
         self._rect = _FocusRect(self._host, fc, fo)
+        # 已挂滚动追踪的滚动条集合（按 id 去重），避免重复 connect。
+        # 焦点框默认是滚动内容 host 的子 widget，理论上随内容一起滚；但编辑器
+        # 内存在嵌套 QScrollArea，聚焦控件在嵌套滚动区里时，其相对 host 的位置会
+        # 随嵌套滚动改变，而 rect（挂在 host 上）不会自动跟随 → 滚动时脱节/滞后
+        # 直到下一次 1s refresh 才自我纠正。故把聚焦控件所在的所有滚动条的
+        # valueChanged 连到 _reposition_on_scroll，滚动时连续重摆 rect（见
+        # _connect_scroll_tracking / _reposition_on_scroll）。
+        self._tracked_scrolls: set = set()
 
         # -- edit mode (in-window overlay) --------------------------------
         self._edit_overlay: Any = None
@@ -371,9 +379,35 @@ class InteractionController(QObject):
     def set_host(self, widget: QWidget) -> None:
         """Reparent the focus rectangle so it tracks the currently-visible
         content (scroll area in HUD mode, edit overlay in edit mode)."""
+        old = self._host
         self._host = widget
+        # 根治：reparent 前先把焦点框彻底归零（隐藏 + 几何 0 + 清 hint），
+        # 这样即使后续 refresh()/_place_rect 因竞态在错位宿主坐标系上计算，
+        # 也只会拿到 0 几何，绝不残留旧页长条黄框。
+        self._hide_focus_rect()
         self._rect.setParent(widget)
-        self._rect.hide()
+        # 半透明无边框窗口上 update() 只调度下一次绘制，DWM 已合成的当前帧
+        # 仍含旧黄框——对旧宿主 repaint() 擦掉旧父控件上的像素，再对新宿主
+        # repaint() 把整块区域立刻重绘，避免「页面已切/编辑器已退出，黄框还在」。
+        try:
+            if old is not None and old is not widget:
+                old.repaint()
+            widget.repaint()
+        except Exception:
+            pass
+
+    def _hide_focus_rect(self) -> None:
+        """唯一、彻底的焦点框清理：隐藏 + 几何归零 + 清提示文案。
+
+        所有「结构变化」（切页 / 进出编辑器 / reparent / 重建 / 退出条目模式）
+        都应调它而非裸 ``self._rect.hide()``，确保焦点框**永不保留可显示的
+        旧几何**——旧尺寸正是「退出编辑器后页面上出现长条黄框」的根因。"""
+        try:
+            self._rect.hide()
+            self._rect.setGeometry(0, 0, 0, 0)
+            self._rect.set_hint("")
+        except Exception:
+            pass
 
     # -- system (shell) bindings -----------------------------------------
     def set_system_bindings(self, bindings: dict) -> None:
@@ -429,7 +463,7 @@ class InteractionController(QObject):
         # 破坏「必须先 A/Enter 才进内层」的两层导航。
         self._edit_inner = False
         self._focus = -1
-        self._rect.hide()
+        self._hide_focus_rect()
         self.refresh()
 
     def start_gamepad(self) -> None:
@@ -492,7 +526,7 @@ class InteractionController(QObject):
         self._card_mode = True
         self._active_card = -1
         self._card_focus = -1
-        self._rect.hide()
+        self._hide_focus_rect()
         self._apply_card_highlight()
 
     def set_rebuilding(self, flag: bool) -> None:
@@ -655,12 +689,12 @@ class InteractionController(QObject):
                 if self._gp_active:
                     self._rect.show()
             else:
-                self._rect.hide()
+                self._hide_focus_rect()
         elif self._card_mode:
             # Card mode: the selected card is highlighted by its border, not a
             # focus rectangle, so there is no single focused button here.
             self._focus = -1
-            self._rect.hide()
+            self._hide_focus_rect()
         else:
             # Item mode: keep focus on a button within the active card.
             rng = ranges.get(self._active_card) if self._active_card >= 0 else None
@@ -677,7 +711,7 @@ class InteractionController(QObject):
                 self._place_rect()
                 self._rect.show()
             else:
-                self._rect.hide()
+                self._hide_focus_rect()
 
         # ---- COLD-START SAFETY NET ----
         # If the user has never interacted via gamepad/keyboard, force
@@ -685,7 +719,7 @@ class InteractionController(QObject):
         # This catches any path that might have slipped a show() past the
         # per-branch gates (e.g. async callback, timer, mouse event).
         if not self._gp_active:
-            self._rect.hide()
+            self._hide_focus_rect()
             # Also clear any card selection border that may have been applied.
             for p in self._panels:
                 fn = getattr(p, "set_card_selected", None)
@@ -694,6 +728,30 @@ class InteractionController(QObject):
                         fn(False)
                     except Exception:
                         pass
+
+        # ---- 最终合法性兜底（根治残留）----
+        # 无论上面哪条分支、谁写的代码，只要焦点指向的项已经不合法，就强制
+        # 归零清理，绝不保留任何旧几何（旧几何是「退出编辑器/切页后长条黄框
+        # 残留」的唯一来源）。这一步让"任何改动"都不可能再让焦点框残留——
+        # 因为它只在 self._current() 真实有效时才可能可见。
+        cur = self._current()
+        if cur is not None:
+            w = cur.widget
+            # 控件必须真实存活、可见，且属于当前宿主坐标系（祖先链含 _host）。
+            # 退出编辑器后若仍指向旧 overlay 的控件，mapTo 会算出错位长条，
+            # 这里直接判死并清理。
+            belongs = False
+            p: Optional[QWidget] = w
+            while p is not None:
+                if p is self._host:
+                    belongs = True
+                    break
+                p = p.parentWidget()
+            if (not _widget_alive(w) or not w.isVisible() or not belongs):
+                self._hide_focus_rect()
+        else:
+            # 索引越界 / 解析失败 → 必清（含几何归零）。
+            self._hide_focus_rect()
 
     # -- focus helpers ----------------------------------------------------
     def _current(self) -> Optional[NavItem]:
@@ -798,15 +856,31 @@ class InteractionController(QObject):
         try:
             cur = self._current()
             if cur is None:
-                self._rect.hide()
+                self._hide_focus_rect()
                 return
             w = cur.widget
             if not _widget_alive(w):
                 # The focused widget was deleted by a page switch / refresh
                 # before this placement ran.  Touching it (mapTo / setGeometry)
                 # would be a native crash, so just hide the rect and bail.
-                self._rect.hide()
+                self._hide_focus_rect()
                 return
+            # 归属校验（根治残留）：焦点控件必须属于当前宿主坐标系（祖先链含
+            # self._host）。退出编辑器后若 _focus 仍指向旧 overlay 的控件，
+            # mapTo 会算出错位长条——这里直接判死并清理，绝不画出旧几何。
+            belongs = False
+            p: Optional[QWidget] = w
+            while p is not None:
+                if p is self._host:
+                    belongs = True
+                    break
+                p = p.parentWidget()
+            if not belongs:
+                self._hide_focus_rect()
+                return
+            # 挂上聚焦控件所在滚动区的滚动追踪：滚动时连续重摆 rect
+            # （编辑器嵌套 QScrollArea 也能跟随，消除「滑动过程停滞」）。
+            self._connect_scroll_tracking(w)
             # Only force the page to scroll when this placement originates from
             # an explicit navigation action.  The per-second refresh() must not
             # call this, otherwise scrolling the viewport away from the focused
@@ -843,7 +917,7 @@ class InteractionController(QObject):
             # (mapTo / setGeometry) is undefined behaviour that can freeze or
             # abort PyQt6 — never let it escape the navigation call.
             try:
-                self._rect.hide()
+                self._hide_focus_rect()
             except Exception:
                 pass
 
@@ -855,7 +929,58 @@ class InteractionController(QObject):
                 self._place_rect()
                 self._rect.show()
         else:
-            self._rect.hide()
+            self._hide_focus_rect()
+
+    def _connect_scroll_tracking(self, widget: QWidget) -> None:
+        """Connect every QScrollArea that contains ``widget`` to the focus-rect
+        repositioner, so scrolling continuously tracks the focused control.
+
+        The rect is a child of the scrollable content (``self._host``) and is
+        therefore positioned in host coordinates.  When the focused widget lives
+        inside a *nested* scroll area (the layout editor / sub-panels each wrap
+        their body in their own QScrollArea), scrolling that nested area shifts
+        the widget relative to the host — but the rect does not move with it,
+        so it visibly lags until the next 1 s ``refresh()`` snaps it back.  By
+        wiring each containing scroll bar's ``valueChanged`` to
+        :meth:`_reposition_on_scroll`, the rect follows on every scroll tick.
+
+        Connections are deduplicated by scroll-bar identity (``id()``) so calling
+        this repeatedly (it runs on every placement) is cheap.
+        """
+        p: Optional[QWidget] = widget
+        seen = set()
+        while p is not None:
+            if isinstance(p, QScrollArea):
+                for bar in (p.verticalScrollBar(), p.horizontalScrollBar()):
+                    if bar is None or id(bar) in self._tracked_scrolls:
+                        continue
+                    try:
+                        bar.valueChanged.connect(self._reposition_on_scroll)
+                        self._tracked_scrolls.add(id(bar))
+                    except Exception:
+                        pass
+            # Don't scan past the scrollable content host: ancestors above it
+            # (window / overlay frame) can never scroll the focused widget.
+            if p is self._host:
+                break
+            nxt = p.parentWidget()
+            if id(nxt) in seen:
+                break
+            seen.add(id(p))
+            p = nxt
+
+    def _reposition_on_scroll(self, _value: int = 0) -> None:
+        """Scroll-event handler: re-pin the focus rect to the focused control.
+
+        Passes ``keep_visible=False`` so scrolling the viewport never fights the
+        user by yanking the page back to the focused control's height.
+        """
+        if not self._rect.isVisible() or self._focus < 0:
+            return
+        try:
+            self._place_rect(keep_visible=False)
+        except Exception:
+            pass
 
     def _ensure_visible(self, w: QWidget) -> None:
         if not _widget_alive(w):
@@ -1303,7 +1428,7 @@ class InteractionController(QObject):
         self._card_mode = True
         self._reset_slider()
         self._focus = -1
-        self._rect.hide()
+        self._hide_focus_rect()
         self._apply_card_highlight()
         self._refresh_active_hints()
 
@@ -1476,7 +1601,7 @@ class InteractionController(QObject):
         self._gp_active = True
         self._reset_slider()
         self._focus = -1
-        self._rect.hide()
+        self._hide_focus_rect()
         self._apply_card_highlight()
         self._refresh_active_hints()
         self._notify_card_focus_change(old_card, pi)
@@ -1497,7 +1622,7 @@ class InteractionController(QObject):
             except Exception:
                 pass
         self._focus = -1
-        self._rect.hide()
+        self._hide_focus_rect()
 
     # -- keyboard ---------------------------------------------------------
     def handle_key(self, ev: Any) -> bool:
