@@ -1,0 +1,24 @@
+tests/test_themes.py::test_apply_theme_sets_state_and_freeze_highlight
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+______________ test_apply_theme_sets_state_and_freeze_highlight _______________
+    def test_apply_theme_sets_state_and_freeze_highlight():
+        apply_theme("少女粉")
+        assert STATE.active_theme_name == "少女粉"
+        # Update-FreezeHighlightColor overrides the theme-dict value:
+>       assert STATE.freeze_highlight_color == Color.from_argb(255, 255, 180, 160)
+E       AssertionError: assert Color(a=255, ... g=209, b=255) == Color(a=255, ... g=180, b=160)
+E         
+E         Omitting 1 identical items, use -vv to show
+E         Differing attributes:
+E         ['r', 'g', 'b']
+E         
+E         Drill down into differing attribute r:
+E           r: 127 != 255...
+E         
+E         ...Full output truncated (6 lines hidden), use '-vv' to show
+tests\test_themes.py:41: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_themes.py::test_apply_theme_sets_state_and_freeze_highlight
+1 failed in 0.18s

@@ -1,0 +1,5 @@
+跟随Windows启动
+允许跟随Windows启动 %PRODUCTNAME% 。仅当使用 %PRODUCTNAME% 作为独立的帧速率监控解决方案时才启用此选项。如果您将此应用程序与客户端（如RivaTuner，HIS iTurbo，EVGA Precision或MSI Afterburner）结合使用，则客户端将在必要时加载服务。
+
+提示：
+- 您可以通过高级属性中的<用户界面>选项卡禁用用户界面工具提示。

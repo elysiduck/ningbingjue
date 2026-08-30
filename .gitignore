@@ -1,0 +1,29 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest_tmp/
+.venv/
+.build_venv/
+.idea/
+
+# ---- 运行时 / 构建产物（体积大、可重建）----
+runtime/
+build/
+dist/
+NingBingJue_portable/
+test_install/
+logs/
+*.log
+launch.err
+*.lnk
+
+# ---- 本机运行时配置（可再生成；真相源在 D:\备份）----
+layout.json
+rtss_config.json
+sync_config.json
+nul
+frozen_pids.txt
+
+# ---- WorkBuddy 会话数据 ----
+.workbuddy/

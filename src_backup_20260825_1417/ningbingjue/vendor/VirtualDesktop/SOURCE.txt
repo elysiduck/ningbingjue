@@ -1,0 +1,9 @@
+VirtualDesktop PowerShell module (v1.5.11, 2025-08-25)
+Original author: Markus Scholtes
+License: MIT (see LICENSE in this folder)
+Source: PowerShell Gallery (https://www.powershellgallery.com/packages/VirtualDesktop/1.5.11)
+         GitHub: https://github.com/MScholtes/VirtualDesktop
+
+Vendored into NingBingJue to avoid per-machine Install-Module and
+admin/elevation scope issues. Runtime imports the module via an absolute
+-Path (no PSModulePath dependency, works under the always-elevated exe).

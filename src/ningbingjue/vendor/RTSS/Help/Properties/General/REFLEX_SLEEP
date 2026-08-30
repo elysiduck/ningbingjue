@@ -1,0 +1,8 @@
+Inject NVIDIA Reflex sleep call
+NVIDIA Reflex integration efficiency depends on optimal placement of NvAPI_D3D_Sleep call inside the game's frame rendering implementation. This call provides an entry point for the driver to sleep at the most optimal spot to achieve the lowest latency. Ideally it should be located in the very beginning of the frame, before simulation and input sampling. 
+This option allows you to control NvAPI_D3D_Sleep injection behavior for the games with no native NVIDIA Reflex support, if you enable NVIDIA Reflex framerate limiting mode. In this case entry point may be either placed by driver automatically or you may forcibly place it immediately before or immediately after the presentation. Placing it immediately before presentation prioritizes frametime stability, placing it immediately after presentation prioritizes latency and may reduce it if the game is performing simulation and input sampling on rendering thread.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may load Reflex.ovl overlay layout in OverlayEditor plugin to analyze NVIDIA Reflex latencies on different stages of rendering pipeline.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

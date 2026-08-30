@@ -1,0 +1,5 @@
+Refresh period
+Radiply changing framerate and frametime values can be hardly readable, if they are updated on each frame. Refresh period is being used to address that. You may set the period to 0 to allow those values to be refreshed on each frame.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

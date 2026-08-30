@@ -1,0 +1,6 @@
+Percentile calculation mode
+Affects the principles of percentile based 1% low and 0.1% low metrics calculation. Both metrics are based on sorted frametimes arrays and reflect instantaneous framerate calculated from a signle frametime located on a boundary of 1% or 0.1% of the slowest frames.
+This option affects the definition of the boundary of 1% or 0.1% of the slowest frames. For linear percentile calculation mode it is static P99/P99.1 as is. Other words, it is 1% or 0.1% of total rendered frames count. Integral calculation mode is a bit more complex but more representative, it is boundary of the slowest frames taking 1% or 0.1% of total benchmark time.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

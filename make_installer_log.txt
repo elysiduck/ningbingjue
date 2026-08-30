@@ -1,0 +1,49 @@
+[make-installer] 步骤 1/5：跳过 PyInstaller（--no-build）。
+[make-installer] 冻结文件夹: C:/Users/13567/WorkBuddy/2026-07-18-10-22-49/ningbingjue/NingBingJue_portable/NingBingJue
+[make-installer] 步骤 2/5：确保 Inno Setup 编译器…
+[make-installer] 本机没有 Inno Setup，开始自动下载并静默安装…
+[make-installer] 下载中: https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe
+     0% (0MB/10MB)     1% (0MB/10MB)     1% (0MB/10MB)     2% (0MB/10MB)     3% (0MB/10MB)     3% (0MB/10MB)     4% (0MB/10MB)     4% (0MB/10MB)     5% (0MB/10MB)     6% (0MB/10MB)     6% (0MB/10MB)     7% (0MB/10MB)     8% (0MB/10MB)     8% (0MB/10MB)     9% (0MB/10MB)     9% (1MB/10MB)     10% (1MB/10MB)     11% (1MB/10MB)     11% (1MB/10MB)     12% (1MB/10MB)     12% (1MB/10MB)     13% (1MB/10MB)     14% (1MB/10MB)     14% (1MB/10MB)     15% (1MB/10MB)     16% (1MB/10MB)     16% (1MB/10MB)     17% (1MB/10MB)     17% (1MB/10MB)     18% (1MB/10MB)     19% (1MB/10MB)     19% (2MB/10MB)     20% (2MB/10MB)     21% (2MB/10MB)     21% (2MB/10MB)     22% (2MB/10MB)     22% (2MB/10MB)     23% (2MB/10MB)     24% (2MB/10MB)     24% (2MB/10MB)     25% (2MB/10MB)     25% (2MB/10MB)     26% (2MB/10MB)     27% (2MB/10MB)     27% (2MB/10MB)     28% (2MB/10MB)     29% (2MB/10MB)     29% (3MB/10MB)     30% (3MB/10MB)     30% (3MB/10MB)     31% (3MB/10MB)     32% (3MB/10MB)     32% (3MB/10MB)     33% (3MB/10MB)     34% (3MB/10MB)     34% (3MB/10MB)     35% (3MB/10MB)     35% (3MB/10MB)     36% (3MB/10MB)     37% (3MB/10MB)     37% (3MB/10MB)     38% (3MB/10MB)     38% (3MB/10MB)     39% (4MB/10MB)     40% (4MB/10MB)     40% (4MB/10MB)     41% (4MB/10MB)     42% (4MB/10MB)     42% (4MB/10MB)     43% (4MB/10MB)     43% (4MB/10MB)     44% (4MB/10MB)     45% (4MB/10MB)     45% (4MB/10MB)     46% (4MB/10MB)     47% (4MB/10MB)     47% (4MB/10MB)     48% (4MB/10MB)     48% (4MB/10MB)     49% (5MB/10MB)     50% (5MB/10MB)     50% (5MB/10MB)     51% (5MB/10MB)     51% (5MB/10MB)     52% (5MB/10MB)     53% (5MB/10MB)     53% (5MB/10MB)     54% (5MB/10MB)     55% (5MB/10MB)     55% (5MB/10MB)     56% (5MB/10MB)     56% (5MB/10MB)     57% (5MB/10MB)     58% (5MB/10MB)     58% (5MB/10MB)     59% (6MB/10MB)     60% (6MB/10MB)     60% (6MB/10MB)     61% (6MB/10MB)     61% (6MB/10MB)     62% (6MB/10MB)     63% (6MB/10MB)     63% (6MB/10MB)     64% (6MB/10MB)     64% (6MB/10MB)     65% (6MB/10MB)     66% (6MB/10MB)     66% (6MB/10MB)     67% (6MB/10MB)     68% (6MB/10MB)     68% (6MB/10MB)     69% (7MB/10MB)     69% (7MB/10MB)     70% (7MB/10MB)     71% (7MB/10MB)     71% (7MB/10MB)     72% (7MB/10MB)     73% (7MB/10MB)     73% (7MB/10MB)     74% (7MB/10MB)     74% (7MB/10MB)     75% (7MB/10MB)     76% (7MB/10MB)     76% (7MB/10MB)     77% (7MB/10MB)     77% (7MB/10MB)     78% (7MB/10MB)     79% (8MB/10MB)     79% (8MB/10MB)     80% (8MB/10MB)     81% (8MB/10MB)     81% (8MB/10MB)     82% (8MB/10MB)     82% (8MB/10MB)     83% (8MB/10MB)     84% (8MB/10MB)     84% (8MB/10MB)     85% (8MB/10MB)     86% (8MB/10MB)     86% (8MB/10MB)     87% (8MB/10MB)     87% (8MB/10MB)     88% (8MB/10MB)     89% (9MB/10MB)     89% (9MB/10MB)     90% (9MB/10MB)     90% (9MB/10MB)     91% (9MB/10MB)     92% (9MB/10MB)     92% (9MB/10MB)     93% (9MB/10MB)     94% (9MB/10MB)     94% (9MB/10MB)     95% (9MB/10MB)     95% (9MB/10MB)     96% (9MB/10MB)     97% (9MB/10MB)     97% (9MB/10MB)     98% (9MB/10MB)     98% (10MB/10MB)     99% (10MB/10MB)     100% (10MB/10MB)
+[make-installer] 已下载 -> C:\Users\13567\AppData\Local\Temp\innosetup_setup.exe
+[make-installer] 静默安装 Inno Setup -> C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\tools\innosetup
+Traceback (most recent call last):
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\make_installer.py", line 330, in <module>
+    raise SystemExit(main())
+                     ~~~~^^
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\make_installer.py", line 299, in main
+    iscc = ensure_iscc()
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\make_installer.py", line 135, in ensure_iscc
+    rc = subprocess.run(
+         ~~~~~~~~~~~~~~^
+        [setup_exe, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+         f"/DIR={INNOSETUP_DIR}"],
+         ^^^^^^^^^^^^^^^^^^^^^^^^^
+        check=False,
+        ^^^^^^^^^^^^
+    ).returncode
+    ^
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\Lib\subprocess.py", line 554, in run
+    with Popen(*popenargs, **kwargs) as process:
+         ~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\Lib\subprocess.py", line 1039, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                        pass_fds, cwd, env,
+                        ^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+                        gid, gids, uid, umask,
+                        ^^^^^^^^^^^^^^^^^^^^^^
+                        start_new_session, process_group)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\Lib\subprocess.py", line 1554, in _execute_child
+    hp, ht, pid, tid = _winapi.CreateProcess(executable, args,
+                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+                             # no special security
+                             ^^^^^^^^^^^^^^^^^^^^^
+    ...<4 lines>...
+                             cwd,
+                             ^^^^
+                             startupinfo)
+                             ^^^^^^^^^^^^
+PermissionError: [WinError 32] 另一个程序正在使用此文件，进程无法访问。

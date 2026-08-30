@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ningbingjue"
+version = "0.1.0"
+description = "Python port of the 凝冰结魄 PowerShell overlay HUD (modular architecture)"
+readme = "README.md"
+requires-python = ">=3.11"
+# 运行时真实用到的第三方库（含惰性 import 的 pygame/psutil，缺则程序降级但不崩）。
+# 声明在此，保证 `pip install .` 或构建 venv 时一并能装到，不再靠 runtime/python 路径“蹭”进来。
+dependencies = ["PyQt6>=6.4", "pygame>=2.5", "psutil>=5.9"]
+
+[project.optional-dependencies]
+ui = ["PyQt6>=6.6"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

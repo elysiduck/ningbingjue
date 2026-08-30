@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_page_jump_moves_between_panels
+STATUS=CRASH
+================================== FAILURES ===================================
+_____________________ test_page_jump_moves_between_panels _____________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x000001F91C097B10>
+    def test_page_jump_moves_between_panels(qapp):
+        app = Application(ROOT, headless=False).boot()
+        win = app._window
+        ctrl = win._controller
+        ctrl.refresh()
+        starts = list(ctrl._panel_starts)
+        assert len(starts) >= 2
+        ctrl.set_focus(0)
+        ctrl.handle_key(_kev(Qt.Key.Key_PageDown))
+        # Focus landed on a different panel's first item.
+>       assert ctrl._focus in starts[1:]
+E       assert 0 in [6, -1, 9, -1, 13]
+E        +  where 0 = <ningbingjue.ui.interaction.InteractionController object at 0x000001F91C4A6350>._focus
+tests\test_interaction.py:119: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_page_jump_moves_between_panels - asser...
+1 failed in 17.36s

@@ -1,0 +1,7 @@
+Application detection level : low
+Selects low detection level for the application associated with the current profile. In this mode %PRODUCTNAME% intercepts application's calls to Direct3D and OpenGL runtime libraries. 
+This mode is recommended for collecting runtime statistics, such as framerate, and enabling additional services, such as On-Screen Display, in the majority of modern 3D applications.
+
+Hints:
+- Some protected applications may treat executable code hooking required for proper application detection, statistics collection and On-Screen Display rendering as possible threat and refuse to run. To troubleshoot such issues try to add a profile for such application and decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

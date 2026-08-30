@@ -1,0 +1,8 @@
+On-Screen Display preview
+Displays On-Screen Display preview. Please take a note that the preview size and position are real only for display modes matching with your current display mode and only in reference to the origin corner.
+
+Hints:
+- You may detach and set custom position and size of preview window by double clicking preview window area. This may simplify the process of visual On-Screen Display position adjustment. 
+- You may right click this window and select <Capture screenshot> command from the context menu to capture the screenshot from currently running 3D application and use it as the background image for this window. This may simplify the process of visual On-Screen Display position adjustment. Default background can be selected  with <Clear> command from the context menu.
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

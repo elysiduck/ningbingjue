@@ -1,0 +1,17 @@
+tests/test_tile_ui.py::test_tile_block_name_and_color_apply_to_hud
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________________ test_tile_block_name_and_color_apply_to_hud _________________
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-774/test_tile_block_name_and_color0')
+qapp = <PyQt6.QtWidgets.QApplication object at 0x00000224BFBBA990>
+    def test_tile_block_name_and_color_apply_to_hud(tmp_path, qapp):
+        """The block name / theme color edited per-tile actually drive the HUD card
+        title text, visibility and neon accent (faithful to tile.ps1 main title)."""
+>       from ningbingjue.core.color.themes import resolve_block_theme_color
+E       ImportError: cannot import name 'resolve_block_theme_color' from 'ningbingjue.core.color.themes' (C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\src\ningbingjue\core\color\themes.py)
+tests\test_tile_ui.py:123: ImportError
+=========================== short test summary info ===========================
+FAILED tests/test_tile_ui.py::test_tile_block_name_and_color_apply_to_hud - I...
+1 failed in 0.38s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-e8d3d91f-5018-42cf-9d51-2d65f1b7ea2b", "reason": "windows-sandbox-recycle-bin-unavailable"}

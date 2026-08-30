@@ -1,0 +1,10 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\python.exe
+rootdir: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue
+configfile: pyproject.toml
+collecting ... collected 1 item
+
+tests/test_button_editor_pagenav_widths.py::test_pagenav_excluded_and_widths_correct PASSED [100%]
+
+============================= 1 passed in 12.07s ==============================
+RC=0

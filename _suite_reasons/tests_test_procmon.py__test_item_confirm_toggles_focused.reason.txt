@@ -1,0 +1,18 @@
+tests/test_procmon.py::test_item_confirm_toggles_focused
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+______________________ test_item_confirm_toggles_focused ______________________
+    def test_item_confirm_toggles_focused():
+        cfg = _cfg([("a", "C:/a.exe")])
+        pm = MockProcessManager()
+        block = ProcMonBlock(cfg, pm)
+        block.refresh_panel()
+        block.on_activate_item()
+>       block.on_item_confirm()  # starts a.exe
+        ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ProcMonBlock' object has no attribute 'on_item_confirm'
+tests\test_procmon.py:92: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_procmon.py::test_item_confirm_toggles_focused - AttributeEr...
+1 failed in 0.43s

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <!-- ryzenadj / 虚拟桌面迁移等需要管理员权限加载 ring0 驱动 -->
+        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <!--
+        关键修复：声明「每显示器 V2」DPI 感知。
+        旧版 PyInstaller 默认管理员清单只用 dpiAware="true"（= 系统级 DPI 感知），
+        一旦由清单设定，运行时的 SetProcessDpiAwareness 就无法再升级，导致程序在非
+        主屏 / 外接屏上沿用主屏 DPR，界面元素缩放失常（过小或过大）。
+        dpiAwareness（Win10 1607+）优先于 dpiAware；PerMonitorV2 让每个显示器都拿到
+        正确的 devicePixelRatio，配合 screenChanged -> _fit_to_screen 自动重适配。
+        dpiAware="true/pm" 作为旧系统的兜底（= 每显示器 V1）。
+      -->
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+    </windowsSettings>
+  </application>
+</assembly>

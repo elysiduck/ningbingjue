@@ -1,0 +1,9 @@
+Inject NVIDIA Reflex latency markers
+By default %PRODUCTNAME% injects NVIDIA Reflex latency markers into any Direct3D11 and Direct3D12 applications, which do not support NVIDIA Reflex technology natively. 
+Latency markers integration allows you to monitor detailed per-stage timings and latencies on different stages of rendering pipeline. 
+However, some applications (e.g. Workers And Resources: Soviet Republic or Overwatch 2) can be incompatible with latency markers injection, so you may use this option for troubleshooting to disable it either globally or for some specific applications.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may load Reflex.ovl overlay layout in OverlayEditor plugin to analyze NVIDIA Reflex latencies on different stages of rendering pipeline.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

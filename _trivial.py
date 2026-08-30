@@ -1,0 +1,1 @@
+print("trivial script works")

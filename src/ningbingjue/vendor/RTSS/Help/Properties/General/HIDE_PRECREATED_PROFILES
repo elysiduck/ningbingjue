@@ -1,0 +1,5 @@
+Hide pre-created profiles
+Toggles visibility of pre-created profiles inside application profiles list.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

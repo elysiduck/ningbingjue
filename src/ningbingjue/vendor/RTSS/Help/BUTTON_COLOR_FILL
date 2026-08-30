@@ -1,0 +1,6 @@
+Fill color
+Displays fill color for On-Screen Display and allows you to redefine it. You can also adjust fill color transparency level for vector 3D and raster 3D On-Screen Display rendering modes.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

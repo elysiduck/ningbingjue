@@ -1,0 +1,19 @@
+tests/test_procmon.py::test_navigation_cycles_focus
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+________________________ test_navigation_cycles_focus _________________________
+    def test_navigation_cycles_focus():
+        cfg = _cfg([("a", "C:/a.exe"), ("b", "C:/b.exe"), ("c", "C:/c.exe")])
+        block = ProcMonBlock(cfg, MockProcessManager())
+        block.refresh_panel()
+        block.on_activate_item()
+        assert block.focus_idx.value == 0
+        assert block.buttons[0].focused
+>       block.on_navigate(1)
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'ProcMonBlock' object has no attribute 'on_navigate'
+tests\test_procmon.py:77: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_procmon.py::test_navigation_cycles_focus - AttributeError: ...
+1 failed in 0.32s

@@ -1,0 +1,27 @@
+tests/test_slider_apply_method.py::test_fan_mouse_drag_debounce_applies
+STATUS=FAILED
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+self = <ningbingjue.ui.panels.FanPanel object at 0x000001D5DC9B7CF0>
+    def _setup(self) -> None:
+        b = self.instance
+        # 行 1：4 个模式按钮
+        mode_row = QHBoxLayout()
+        self.auto_btn = _btn("Auto", self.accent)
+        self.manual_btn = _btn("Manual", self.accent)
+        self.curve_btn = _btn("Curve", self.accent)
+        self.silent_btn = _btn("Silent", self.accent)
+        mode_row.addWidget(self.auto_btn)
+        mode_row.addWidget(self.manual_btn)
+        mode_row.addWidget(self.curve_btn)
+        mode_row.addWidget(self.silent_btn)
+        self.root.addLayout(mode_row)
+        # 行 2：转速滑块（manual 模式调手动转速，silent 模式调静音固定转速）
+        pwm_row = QHBoxLayout()
+        self.pwm_title = _label("手动转速")
+>       self.pwm_lbl = QLabel(f"{b.pwm_to_pct(b.manual_pct)}%")
+                                 ^^^^^^^^^^^^
+E       AttributeError: '_FakeFan' object has no attribute 'pwm_to_pct'
+src\ningbingjue\ui\panels.py:1601: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_slider_apply_method.py::test_fan_mouse_drag_debounce_applies
+1 failed in 0.59s

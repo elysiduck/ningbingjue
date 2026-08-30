@@ -1,0 +1,18 @@
+tests/test_tile.py::test_navigation_matrix
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________________________ test_navigation_matrix ____________________________
+    def test_navigation_matrix():
+        cfg = AppConfig()
+        cfg.tiles = _tiles()
+        block = TileBlock(cfg)
+        block.on_activate_item()
+        assert block.focus_idx.value == 0
+>       block.on_navigate(1)  # down within col 0
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'TileBlock' object has no attribute 'on_navigate'
+tests\test_tile.py:63: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_tile.py::test_navigation_matrix - AttributeError: 'TileBloc...
+1 failed in 0.30s

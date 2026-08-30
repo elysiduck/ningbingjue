@@ -1,0 +1,5 @@
+Frametime history overlay style
+Allows selecting frametime history overlay visualisation style. The history can be displayed either as graph or as diagam.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

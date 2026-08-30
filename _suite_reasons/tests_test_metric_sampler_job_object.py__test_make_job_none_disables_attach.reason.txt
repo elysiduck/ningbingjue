@@ -1,0 +1,27 @@
+tests/test_metric_sampler_job_object.py::test_make_job_none_disables_attach
+STATUS=FAILED
+                      ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+self = <unittest.mock._patch object at 0x00000215E3B827B0>
+    def get_original(self):
+        target = self.getter()
+        name = self.attribute
+        original = DEFAULT
+        local = False
+        try:
+            original = target.__dict__[name]
+        except (AttributeError, KeyError):
+            original = getattr(target, name, DEFAULT)
+        else:
+            local = True
+        if name in _builtins and isinstance(target, ModuleType):
+            self.create = True
+        if not self.create and original is DEFAULT:
+>           raise AttributeError(
+                "%s does not have the attribute %r" % (target, name)
+            )
+E           AttributeError: <module 'ningbingjue.core.metrics' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\src\\ningbingjue\\core\\metrics.py'> does not have the attribute '_make_kill_on_close_job'
+runtime\python\Lib\unittest\mock.py:1473: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_metric_sampler_job_object.py::test_make_job_none_disables_attach
+1 failed in 0.36s

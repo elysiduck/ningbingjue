@@ -1,0 +1,7 @@
+On-Screen Display coordinate space : framebuffer
+By default On-Screen Display coordinate space matches with coordinate space of rendering viewport, i.e. the last rectangular area application was rendering to. However, certain applications (e.g. StarCraft II : Wings of Liberty) can use multiple viewports during frame rendering (e.g. different viewports for 3D world and HUD and so on). In this case the On-Screen Display origin follows one of corners of the last viewport, defined during frame rendering, which may be located in undesired position. On-Screen Display coordinate space override related options can be used for restoring expected origin position in such applications.
+This button selects whole framebuffer as coordinate space for On-Screen Display. 
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

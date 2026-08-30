@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>凝冰结魄 呼吸灯辉光候选效果</title>
+  <style>
+    :root {
+      --bg: #15171c;
+      --fg: #e0e2e6;
+      --muted: #9aa0a6;
+      --accent: #7fd1ff;
+      --card: #1e2026;
+      --card-border: #2c2f38;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 32px 24px;
+      background: var(--bg);
+      color: var(--fg);
+      font: 14px/1.6 "Segoe UI", "Microsoft YaHei", sans-serif;
+    }
+    h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+    .subtitle { color: var(--muted); margin-bottom: 26px; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 16px;
+      color: var(--accent);
+    }
+    .tag {
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-bottom: 12px;
+    }
+    .thumb {
+      width: 140px;
+      height: auto;
+      border-radius: 10px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.4);
+      background: #0c0d10;
+    }
+    .caption {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 12px;
+      text-align: left;
+      width: 100%;
+    }
+    .section-title {
+      font-size: 18px;
+      margin: 36px 0 18px;
+      border-bottom: 1px solid var(--card-border);
+      padding-bottom: 8px;
+    }
+    .note {
+      background: #16191f;
+      border-left: 3px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 0 10px 10px 0;
+      color: var(--muted);
+      margin-top: 28px;
+    }
+    .note strong { color: var(--fg); }
+  </style>
+</head>
+<body>
+  <h1>凝冰结魄 呼吸灯辉光候选效果图</h1>
+  <div class="subtitle">
+    窗口尺寸 280×600，辉光色 (127, 209, 255)，圆角 16px。每组包含「峰值（a=1.0）」与「谷值（a=0.2）」两帧，便于判断呼吸动态范围。
+  </div>
+
+  <h3 class="section-title">峰值：呼吸亮度最大时</h3>
+  <div class="grid">
+    <div class="card">
+      <h2>方案 A · 径向渐变</h2>
+      <span class="tag">中心→边缘 逐渐提亮</span>
+      <img class="thumb" src="breathing_effect_A.png" alt="方案 A 峰值">
+      <div class="caption">
+        以窗口中心为圆心的椭圆径向渐变，内侧保持微光，边缘一圈达到高亮。
+        四周连续、无断层；但辉光覆盖卡片区，需要托盘半透明，存在重绘性能成本。
+      </div>
+    </div>
+    <div class="card">
+      <h2>方案 B · 边缘均匀衰减</h2>
+      <span class="tag">四边恒定高亮 · 中心不过暗</span>
+      <img class="thumb" src="breathing_effect_B.png" alt="方案 B 峰值">
+      <div class="caption">
+        基于到最近窗口边的矩形距离场：四边亮度一致且高，向中心均匀衰减但仍保留底光。
+        同样需托盘半透明，性能影响与 A 相当。
+      </div>
+    </div>
+    <div class="card">
+      <h2>方案 C · 扫描线式辉光</h2>
+      <span class="tag">框形呼吸 + 整窗静态底光</span>
+      <img class="thumb" src="breathing_effect_C.png" alt="方案 C 峰值">
+      <div class="caption">
+        呼吸部分仍严格限制在「窗口 − 托盘」的框形区域内（无额外性能开销）。
+        同时一次性烘焙一层覆盖整窗的静态底光，让中间不再纯黑、边缘与中心自然过渡。
+      </div>
+    </div>
+    <div class="card">
+      <h2>方案 D · 当前实现（对照）</h2>
+      <span class="tag">现状：四周黑 / 边缘亮 / 中间黑</span>
+      <img class="thumb" src="breathing_effect_D.png" alt="方案 D 峰值">
+      <div class="caption">
+        顶部 60px 渐变带 + 左右/底部 10px 窄边 + 多层霓虹描边，托盘用不透明的窗底色覆盖。
+        因此呈现「框外一条亮边、中间大块死黑」的断层感。
+      </div>
+    </div>
+  </div>
+
+  <h3 class="section-title">谷值：呼吸亮度最暗时（a = 0.2）</h3>
+  <div class="grid">
+    <div class="card">
+      <h2>方案 A · 谷值</h2>
+      <img class="thumb" src="breathing_effect_A_dim.png" alt="方案 A 谷值">
+    </div>
+    <div class="card">
+      <h2>方案 B · 谷值</h2>
+      <img class="thumb" src="breathing_effect_B_dim.png" alt="方案 B 谷值">
+    </div>
+    <div class="card">
+      <h2>方案 C · 谷值</h2>
+      <img class="thumb" src="breathing_effect_C_dim.png" alt="方案 C 谷值">
+    </div>
+    <div class="card">
+      <h2>方案 D · 谷值</h2>
+      <img class="thumb" src="breathing_effect_D_dim.png" alt="方案 D 谷值">
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>渲染说明：</strong><br>
+    方案 A/B 为追求「中间不过暗」将辉光延伸进卡片区，需要让托盘底色带一定透明度，
+    实际运行时相当于每帧重绘卡片区域，在低功耗掌机上可能回到之前的 9%–17% CPU 占用峰值。<br><br>
+    方案 C 是<strong>性能友好</strong>折中：呼吸部分仍只更新窗口外框（与当前实现一致），
+    但通过一次性静态底光把中间从「纯黑」提升到「有微光的冰蓝底」，边缘也同时保持明亮，整体观感更均匀。<br><br>
+    方案 D 为当前代码的忠实复刻，作为对照。<br>
+    所有图片由纯标准库 PNG 编码器生成，未改动 ningbingjue 源码。
+  </div>
+</body>
+</html>

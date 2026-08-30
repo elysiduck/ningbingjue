@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_slider_arrow_nudges_value
+STATUS=CRASH
+        ctrl = win._controller
+        ctrl.refresh()
+        rtss = app.blocks["rtss"]
+        before = rtss.fps
+        for i, it in enumerate(ctrl._items):
+            if it.widget is _rtss_panel(win).slider:
+                ctrl.set_focus(i)
+                break
+        # ArrowUp should decrease FPS (slider consumes the arrow).
+        ctrl.handle_key(_kev(Qt.Key.Key_Up))
+        after = app.blocks["rtss"].fps
+>       assert after == max(rtss.FPS_MIN, before - 1)
+E       assert 30 == 29
+E        +  where 29 = max(20, (30 - 1))
+E        +    where 20 = <ningbingjue.blocks.rtss.RtssBlock object at 0x000001951263C590>.FPS_MIN
+tests\test_interaction.py:138: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 3 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[hotkey] RegisterHotKey 失败: mods=0xa vk=0x77 err=1409
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_slider_arrow_nudges_value - assert 30 ...
+1 failed in 19.48s

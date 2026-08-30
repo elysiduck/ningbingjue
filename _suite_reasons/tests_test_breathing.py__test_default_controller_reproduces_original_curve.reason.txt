@@ -1,0 +1,17 @@
+tests/test_breathing.py::test_default_controller_reproduces_original_curve
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+______________ test_default_controller_reproduces_original_curve ______________
+    def test_default_controller_reproduces_original_curve():
+        bc = BreathingController()
+        # Default period ~2.36 s => phase step ~0.08 per 30 ms tick (the original
+        # fixed step).  Within 1e-3 of 0.08 — the tiny delta is invisible.
+>       assert abs(bc._step - 0.08) < 1e-3
+E       assert 0.026494666223382826 < 0.001
+E        +  where 0.026494666223382826 = abs((0.10649466622338283 - 0.08))
+E        +    where 0.10649466622338283 = <ningbingjue.ui.breathing.BreathingController object at 0x000001CBA6F8C1A0>._step
+tests\test_breathing.py:15: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_breathing.py::test_default_controller_reproduces_original_curve
+1 failed in 0.57s

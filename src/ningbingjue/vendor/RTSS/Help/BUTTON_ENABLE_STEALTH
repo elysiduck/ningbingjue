@@ -1,0 +1,5 @@
+Stealth mode
+Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. Enabling stealth mode may help to resove such issues. When this mode is enabled, %PRODUCTNAME% uses sophisticated code hooking techniques making it harder for third party applications to detect a hook.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

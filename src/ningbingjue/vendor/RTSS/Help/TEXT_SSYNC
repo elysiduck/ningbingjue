@@ -1,0 +1,10 @@
+Scanline sync
+Allows defining target scanline index and activating scanline synchroniation for 3D applications. Synchronizing the framerate to some specific rasterizer position (i.e. target scanline) during gaming can acheive VSync ON effect with lower input lag and predictable fixed tearline position. You may move the tearline down by increasing the scanline index. Set it to zero to disable the synchronization.
+
+Hints:
+- It is necessary to disable VSync for proper scanline synchronization functionality.
+- You may enable scanline sync in conjunction with front/back edge sync framerate limiting modes to activate hybrid scanline sync modes. In this case actual target scanline synchronization is performed just once on framerate limiting start then you can steer the tearline postiong with system clock.
+- You may use FCAT overlay in moving bar mode as visual tearline position indicator.
+- You may specify negative scanline index to set the offset from total number of scanlines.
+- You may right click this field to select target display for scanline synchronization in multimonitor environment.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

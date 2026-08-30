@@ -1,0 +1,10 @@
+Framerate limit
+Allows defining framerate limit for 3D applications. Limiting the framerate during gaming can help to reduce the power consumption as well as it can improve gaming experience due to removing unwanted microstuttering effect caused by framerate fluctuations. Set it to zero to disable the limit.
+
+Hints:
+- It is strongly recommended to disable VSync for proper framerate limiting functionality.
+- You may specify fractional framerate values, e.g. 59.94 frames per second.
+- You may specify the limit either as a target framerate or as a target frametime. Click the adjacent "Framerate limit" caption to switch between framerate and frametime limit modes. If you're using outdated third party skins having no native framerate/frametime limit switching functionality, you may alternately hold <Ctrl> and click this field to switch between the modes.
+- You may hold <Alt> and click this field to set framerate limit to precise refresh rate of display hosting %PRODUCTNAME% window.
+- You may right click this field to set framerate limit to precise refresh rate of any attached display or set it to VRR cap of any attached display (95% of refresh rate).
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

@@ -1,0 +1,20 @@
+tests/test_app_integration.py::test_procmon_toggle_via_shim
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+________________________ test_procmon_toggle_via_shim _________________________
+    def test_procmon_toggle_via_shim():
+        app, _ = _boot_with_all_cards()
+        toggle = app.shims["Toggle-ProcMonScript"]
+        block = app.blocks["procmon"]
+        before = block.configs[0]["Running"]
+        toggle(0)  # start scriptA (mock pm records start)
+        after = block.configs[0]["Running"]
+>       assert after != before
+E       assert False != False
+tests\test_app_integration.py:71: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 2 个遗留监视器进程
+=========================== short test summary info ===========================
+FAILED tests/test_app_integration.py::test_procmon_toggle_via_shim - assert F...
+1 failed in 10.61s

@@ -1,0 +1,7 @@
+Percentile buffer
+Affects percentile based 1% low and 0.1% low metrics calculation. Both metrics are based on sorted frametimes arrays and reflect instantaneous framerate calculated from a signle frametime located on a boundary of 1% or 0.1% of the slowest frames.
+This option defines size of frametimes buffer for sorting. The buffer can be either unlimited, so every frame rendered during benchmarking session affects the result, or it can be rolling ring buffer, so too old frames are discarded and just the few last seconds of the benchmark are being processed.
+Unlimited mode is preferred if you manually start benchmarking session with a hotkey. Ring mode can be preferred if you permanently keep the benchmark mode enabled and want to see 1% and 0.1% low metrics reflecting just a few last seconds of gameplay.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

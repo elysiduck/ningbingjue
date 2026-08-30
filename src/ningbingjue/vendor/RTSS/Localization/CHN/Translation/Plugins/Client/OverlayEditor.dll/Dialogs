@@ -1,0 +1,391 @@
+#src Add embedded object
+#dst 添加一个内置对象
+#end
+#src Data source
+#dst 数据来源
+#end
+#src Text table
+#dst 文本表格
+#end
+#src Add label
+#dst 添加标签
+#end
+#src Add current value macro
+#dst 添加当前值宏
+#end
+#src Add embedded graph
+#dst 添加一个嵌入式图形
+#end
+#src Add embedded image
+#dst 添加图片
+#end
+#src use current template
+#dst 使用当前模板
+#end
+#src use custom template
+#dst 使用自定义模板
+#end
+#src use static image
+#dst 使用静态图像
+#end
+
+#src Embedded animated image settings
+#dst 内置动画图像设置
+#end
+#src Image template
+#dst 图片模板
+#end
+#src Image template properties
+#dst 图片模板属性
+#end
+#src Image width, in pixels or symbols if negative
+#dst 宽度，单位为像素，如果为负数则为字符
+#end 
+#src Image height, in pixels or symbols if negative
+#dst 高度，单位为像素，如果为负数则为字符
+#end
+#src Sprite animation minimum, in data source units
+#dst Sprite 动画的最小值，以数据源为单位
+#end
+#src Sprite animation maximum, in data source units
+#dst Sprite 动画的最大值，以数据源为单位
+#end
+#src Sprite animation bias
+#dst Sprite 动画的偏移
+#end
+#src Sprite X, in pixels
+#dst Sprite X, 以像素为单位
+#end
+#src Sprite Y, in pixels
+#dst Sprite Y, 以像素为单位
+#end
+#src Sprite width, in pixels
+#dst Sprite 宽度, 以像素为单位
+#end
+#src Sprite height, in pixels
+#dst Sprite 高度, 以像素为单位
+#end
+#src Sprites number
+#dst Sprites 数量
+#end
+#src Sprites number per line
+#dst 每行 Sprites 数量
+#end
+#src Resize image to layer extent
+#dst 将图像调整到图层范围
+#end
+
+#src Embedded graph settings
+#dst 嵌入式图形设置
+#end
+#src Graph template
+#dst 图形模板
+#end
+#src Graph template properties
+#dst 图形模板属性
+#end
+#src Graph width, in pixels or symbols if negative
+#dst 图形宽度, 单位为像素，如果为负数则为字符
+#end 
+#src Graph height, in pixels or symbols if negative
+#dst 图形高度, 单位为像素，如果为负数则为字符
+#end
+#src Graph margin, in pixels
+#dst 图形边距，以像素为单位
+#end
+#src Graph minimum, in data source units
+#dst 图形最小值，以数据源为单位
+#end
+#src Graph maximum, in data source units
+#dst 图形最大值，以数据源为单位
+#end
+#src Range minimum, in data source units
+#dst 范围最小值，以数据源为单位
+#end
+#src Range maximum, in data source units
+#dst 范围最大值，以数据源为单位
+#end
+#src Autoscale graph
+#dst 自动缩放图形
+#end
+#src Graph style
+#dst 图形样式
+#end
+#src graph
+#dst 图形
+#end
+#src diagram
+#dst 图表
+#end
+#src barchart
+#dst 条形图
+#end
+#src Graph background
+#dst 图形背景
+#end
+#src enabled
+#dst 启用
+#end
+#src disabled
+#dst 禁用
+#end
+#src Graph orientation
+#dst 图形定向
+#end
+#src horizontal
+#dst 水平
+#end
+#src vertical
+#dst 垂直
+#end
+#src Graph direction
+#dst 图形方向
+#end
+#src normal
+#dst 正常
+#end
+#src mirrored
+#dst 镜像
+#end
+#src Resize graph to layer extent
+#dst 将图形大小调整为图层范围
+#end
+
+#src Embedded image settings
+#dst 嵌入图像设置
+#end
+
+#src Layer properties
+#dst 图层属性
+#end
+#src Name
+#dst 名字
+#end 
+#src Hypertext
+#dst 超文本
+#end 
+#src Use custom text color
+#dst 使用自定义文本颜色
+#end
+#src Use custom background color
+#dst 使用自定义背景颜色
+#end
+#src Text size, in percents
+#dst 文字大小，以百分比为单位
+#end
+#src Text alignment, in symbols, left or right if negative
+#dst 文本对齐方式，以符号表示，如果为负则向左或向右
+#end
+#src Use fixed size alignment
+#dst 使用固定大小对齐
+#end
+#src Resize layer to content
+#dst 根据内容调整图层大小
+#end
+#src Manual extent origin
+#dst 手动范围原点
+#end
+#src Sticky layer position
+#dst 粘性层位置
+#end
+#src Apply
+#dst 应用
+#end
+
+#src Add new data sources
+#dst 添加新数据源
+#end
+#src Data provider
+#dst 数据提供方
+#end
+#src Export
+#dst 导出
+#end
+
+#src Data source settings
+#dst 数据源设置
+#end
+#src AIDA64 sensor properties
+#dst AIDA64传感器属性
+#end
+#src ID
+#dst 识别码
+#end
+#src Overlay data source properties
+#dst 叠加数据源属性
+#end
+#src Name
+#dst 命名
+#end
+#src Units
+#dst 单位
+#end
+#src Format
+#dst 格式
+#end
+#src Correction formula
+#dst 纠正公式
+#end
+
+#src HWiNFO64 sensor properties
+#dst HWiNFO64传感器属性
+#end
+#src Type
+#dst 类型
+#end
+#src Instance
+#dst 实例
+#end
+
+#src MSI Afterburner sensor properties
+#dst 微星Afterburner传感器属性
+#end
+
+#src HAL sensor properties
+#dst 硬件抽象层传感器属性
+#end
+
+#src Performance counter properties
+#dst 性能计数器属性
+#end
+#src Object name
+#dst 对象名称
+#end
+#src Instance name or index
+#dst 实例名称或索引
+#end
+#src Counter name
+#dst 计数器名称
+#end
+#src Enable dynamic mode
+#dst 启用动态模式
+#end
+
+#src Instance name
+#dst 实例名称
+#end
+#src Use instance index instead of name
+#dst 使用实例索引而不是名称
+#end
+
+#src Overlay data sources
+#dst 叠加数据的来源
+#end
+#src Setup
+#dst 设置
+#end
+#src Add
+#dst 添加
+#end
+#src Remove
+#dst 移除
+#end
+
+#src Ovelay editor
+#dst 叠加编辑器
+#end
+
+#src Overlay properties
+#dst 叠加属性
+#end
+#src Refresh period, in milliseconds
+#dst 更新周期，以毫秒为单位
+#end
+#src Master settings
+#dst 主设置
+#end
+#src Embedded image
+#dst 嵌入图像
+#end
+#src Ping address
+#dst Ping地址
+#end
+
+#src Ovelay editor
+#dst 叠加编辑器
+#end
+
+#src Select sprite
+#dst 选择sprite
+#end
+
+#src Text tables
+#dst 文字表格
+#end
+
+#src Text table properties
+#dst 文本表的属性
+#end
+#src Value
+#dst 值
+#end
+#src Units
+#dst 单位
+#end
+#src Cell size, in percents
+#dst 单元格大小，百分比
+#end
+#src Cell alignment, in symbols
+#dst 单元格数量，百分比
+#end
+#src Table edit mode
+#dst 表编辑模式
+#end
+#src lines
+#dst 行数
+#end
+#src cells
+#dst 单元格数
+#end
+
+#src Text table cell properties
+#dst 文本表格单元格的属性
+#end
+#src Line name
+#dst 行名
+#end
+#src Use custom line text color
+#dst 自定义行文本颜色
+#end
+#src Use custom cell text color
+#dst 自定义单元格文本的颜色
+#end
+#src Cell data source
+#dst 单元格数据源
+#end
+#src Cell text
+#dst 单元格文本
+#end
+
+#src Add new text table cells
+#dst 添加新的文本表单元格
+#end
+#src Add cells to new line
+#dst 添加单元格到新行
+#end
+#src Add separator
+#dst 添加分隔符
+#end
+
+#src Overlay layers
+#dst 叠加图层
+#end
+
+#src Dynamic color
+#dst 动态色彩
+#end
+#src Min
+#dst 最小
+#end
+#src Max
+#dst 最大
+#end
+#src Preview
+#dst 预览
+#end
+#src Blend colors
+#dst 混合颜色
+#end
+#src Embed formula
+#dst 嵌入公式
+#end

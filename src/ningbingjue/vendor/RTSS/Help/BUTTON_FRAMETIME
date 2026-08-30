@@ -1,0 +1,5 @@
+Framerate/frametime limit
+Allows switching between framerate and frametime limit mode. In frametime mode the limit is specified as target frametime with 1 microsecond precision.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

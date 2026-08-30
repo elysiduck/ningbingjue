@@ -1,0 +1,20 @@
+{
+  "enabled": false,
+  "heavy_enabled": false,
+  "dry_run": false,
+  "offsets": {
+    "idle": 0,
+    "light": -20,
+    "heavy": -50
+  },
+  "hmax": 75.0,
+  "hmean": 35.0,
+  "hgpu_hold": 55.0,
+  "t_light_s": 1.5,
+  "sticky_s": 30.0,
+  "heavy_confirm_s": 2.0,
+  "heavy_validated": false,
+  "game_exe_whitelist": [
+    "python.exe"
+  ]
+}

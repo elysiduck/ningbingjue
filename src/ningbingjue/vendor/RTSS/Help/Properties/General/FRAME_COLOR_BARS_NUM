@@ -1,0 +1,7 @@
+Frame color indicator mode
+Allows selecting frame color indicator mode.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.
+

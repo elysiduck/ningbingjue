@@ -1,0 +1,5 @@
+Reset cache
+Alows resetting injection offsets cache and rebuilding it after restarting the application. This function can be useful for troubleshooting.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

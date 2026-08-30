@@ -1,0 +1,29 @@
+src/ningbingjue/
+├── __init__.py / app.py           ← 顶层：应用编排 & 启动入口
+├── core/                           ← 引擎层（纯 Python，不依赖 GUI）
+│   ├── config.py                  ← layout.json 配置管理
+│   ├── registry.py                ← Block 插件注册表
+│   ├── navigation.py              ← 页面/区域/项目 导航状态机
+│   ├── theme.py                   ← 10 套主题管理器
+│   ├── timers.py                  ← 定时器 + 呼吸动画数学
+│   └── color/                     ← 色彩子系统（RGB/Palette/Semantic/Styles）
+├── blocks/                         ← 6 个功能模块（对应 PS1 的 blocks/*.ps1）
+│   ├── rtss.py                    ← RTSS 帧率限制
+│   ├── procmon.py                 ← 进程监控
+│   ├── freeze.py                  ← 进程冻结
+│   ├── ls.py                      ← Lossless Scaling 控制
+│   ├── power.py                   ← Ryzen APU 电源管理
+│   └── tile.py                    ← 启动磁贴
+├── platform/                       ← 平台适配层（Windows + Mock 双实现）
+│   ├── rtss_cli.py / lossless_scaling.py / ryzenadj.py
+│   ├── process_manager.py / battery.py / window.py
+└── ui/                             ← PyQt6 GUI 层（仅 Windows 环境加载）
+    ├── app_window.py              ← 主覆盖窗口 + BlockPanel 聚合
+    ├── panels.py                  ← 各功能面板渲染
+    ├── button_edit.py             ← 按钮风格编辑器（52KB，最大文件）
+    ├── edit_overlay.py            ← 布局编辑器（64KB）
+    ├── rounded_button.py          ← 自定义切角多边形按钮
+    ├── tile_button.py             ← 磁贴按钮
+    ├── gamepad.py / gamepad_hint.py ← XInput 手柄支持
+    ├── breathing.py               ← 呼吸灯动画
+    └── interaction.py             ← 统一交互层

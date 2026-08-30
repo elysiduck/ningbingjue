@@ -1,0 +1,25 @@
+tests/test_skin.py::test_overlay_offscreen_builds_and_paints
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________________ test_overlay_offscreen_builds_and_paints ___________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x000001888E7B96D0>
+    def test_overlay_offscreen_builds_and_paints(qapp):
+        """Building + painting the overlay on the offscreen surface must not
+        raise (the old crash was an AttributeError on uninitialised skin attrs,
+        surfacing as a hard Python exit 127 with no traceback)."""
+        app = Application(ROOT, headless=False).boot()
+        win = app._window
+        # The test host owns no display, so Qt selects the offscreen platform.
+>       assert win._offscreen is True
+E       assert False is True
+E        +  where False = <ningbingjue.ui.app_window._OverlayWindow object at 0x000001888CD10190>._offscreen
+tests\test_skin.py:43: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_skin.py::test_overlay_offscreen_builds_and_paints - assert ...
+1 failed in 12.93s

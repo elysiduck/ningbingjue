@@ -1,0 +1,27 @@
+tests/test_perfmon_panel_width.py::test_perfmon_value_labels_single_line
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________________ test_perfmon_value_labels_single_line ____________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x0000028FB5B23CF0>
+    def test_perfmon_value_labels_single_line(qapp):
+        """Every value cell must be a _NoWrapElideLabel that stays on ONE line
+        (wordWrap=False). Long status strings ('已锁帧 30 FPS' / 'CO=-50 (-50未验证)')
+        must NOT wrap — they elide with '…' instead, so the card never grows taller
+        and never wraps content onto a second line."""
+        panel = _make_perfmon()
+        val_labels = [
+            c for c in panel.findChildren(_NoWrapElideLabel)
+        ]
+        # Five left + five right = 10 value labels in the grid; all of them must
+        # be single-line (no wrapping).
+>       assert len(val_labels) >= 10, (
+            f"expected ≥10 single-line value labels, found {len(val_labels)}"
+        )
+E       AssertionError: expected ≥10 single-line value labels, found 8
+E       assert 8 >= 10
+E        +  where 8 = len([<ningbingjue.ui.panels._NoWrapElideLabel object at 0x0000028FB5B50B90>, <ningbingjue.ui.panels._NoWrapElideLabel obje...pElideLabel object at 0x0000028FB5B51090>, <ningbingjue.ui.panels._NoWrapElideLabel object at 0x0000028FB5B511D0>, ...])
+tests\test_perfmon_panel_width.py:146: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_perfmon_panel_width.py::test_perfmon_value_labels_single_line
+1 failed in 0.29s

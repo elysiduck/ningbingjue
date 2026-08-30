@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>辉光呼吸根治重构报告</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171b24; --panel2:#1f2530; --line:#2b3340;
+    --text:#e6edf3; --muted:#9aa7b4; --accent:#7fd1ff; --warn:#ffc08a; --ok:#7ee787;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    line-height:1.7;padding:28px 0}
+  .wrap{max-width:920px;margin:0 auto;padding:0 22px}
+  h1{font-size:26px;color:var(--accent);margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 22px;font-size:14px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+    padding:18px 20px;margin:16px 0}
+  .card h2{margin:0 0 10px;font-size:18px;color:var(--text)}
+  .pill{display:inline-block;background:var(--panel2);border:1px solid var(--line);
+    color:var(--accent);border-radius:999px;padding:2px 12px;font-size:12px;margin-right:8px}
+  code{background:#0b0e14;border:1px solid var(--line);border-radius:6px;
+    padding:1px 6px;font-size:13px;color:#ffd9a8}
+  svg{display:block;margin:14px auto;max-width:100%}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);color:var(--accent)}
+  ul{margin:8px 0;padding-left:20px}
+  .ok{color:var(--ok)} .warn{color:var(--warn)}
+  .note{color:var(--muted);font-size:13px}
+  footer{color:var(--muted);font-size:12px;margin-top:24px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>辉光呼吸根治重构报告</h1>
+<p class="sub">凝冰结魄 · HUD 呼吸灯 · 彻底免去「每帧整窗重绘」 · 2026-08-29</p>
+
+<div class="card">
+  <h2>一句话结论</h2>
+  <p>此前已把「重绘范围」从「整棵控件树」缩到「一层缓存位图」、并把呼吸节拍从 40ms 降到 50ms，掌机仍有残余卡顿。根因是：<b>半透明辉光层每帧 <code>update()</code> 都会触发 Windows DWM 对整个窗口表面的 Alpha 混合</b>，分数 DPR(1.5×) 还会放大像素惩罚。本次根治把辉光提成「独立的顶层窗口」，呼吸/暗化改用 <code>setWindowOpacity</code>——由 DWM 在合成阶段做 alpha 乘法，<b>不重新光栅化任何像素</b>，每帧 CPU 开销趋近于 0。</p>
+</div>
+
+<div class="card">
+  <h2>① 为什么「开了呼吸灯」还会卡？（通俗易懂）</h2>
+  <p>把呼吸辉光想象成窗户上贴的一层「半透明彩色玻璃」。每一帧，Windows 都要把这层玻璃和后面的桌面重新「叠」一遍颜色（Alpha 混合）。问题不在于「画了什么」，而在于「它是半透明的、而且每帧都要重叠」：</p>
+  <ul>
+    <li>呼吸灯是 <span class="pill">WA_TranslucentBackground</span> 的半透明层，整窗大小。</li>
+    <li>呼吸以 ~20–25fps 持续触发 <code>ov.update()</code> → 辉光缓存位图 blit + DWM 整窗重混。</li>
+    <li>掌机是 <b>分数 DPR 1.5×</b>（1080p@150%），这块半透明面被放大，混色像素更多 → 更慢。</li>
+    <li>滚动时再叠加重绘 → 卡顿最明显（之前修的「滚动冻结」只缓解了、没根除）。</li>
+  </ul>
+  <p class="note">WorkBuddy / 普通软件没有这种「常驻半透明动画层」，所以滚动顺滑——这正是差异来源。</p>
+</div>
+
+<div class="card">
+  <h2>② 旧架构：每帧 update → DWM 整窗重混</h2>
+  <svg viewBox="0 0 680 230" xmlns="http://www.w3.org/2000/svg" style="max-width:680px">
+    <rect x="0" y="0" width="680" height="230" fill="#0f1117"/>
+    <text x="340" y="26" fill="#9aa7b4" font-size="14" text-anchor="middle">旧：辉光为半透明子层，每帧 update</text>
+    <!-- 主窗口 -->
+    <rect x="40" y="50" width="280" height="150" rx="12" fill="#171b24" stroke="#2b3340"/>
+    <text x="180" y="74" fill="#e6edf3" font-size="13" text-anchor="middle">主窗口（不透明）</text>
+    <rect x="60" y="92" width="100" height="40" rx="6" fill="#1f2530" stroke="#2b334 -40"/>
+    <rect x="60" y="92" width="100" height="40" rx="6" fill="#1f2530" stroke="#2b3340"/>
+    <text x="110" y="117" fill="#9aa7b4" font-size="11" text-anchor="middle">卡片</text>
+    <!-- 半透明辉光层 -->
+    <rect x="40" y="50" width="280" height="150" rx="12" fill="#7fd1ff" opacity="0.18"/>
+    <rect x="40" y="50" width="280" height="150" rx="12" fill="none" stroke="#7fd1ff" stroke-width="2" opacity="0.6"/>
+    <text x="180" y="150" fill="#7fd1ff" font-size="12" text-anchor="middle">半透明辉光层</text>
+    <!-- 逐帧箭头 -->
+    <g stroke="#ffc08a" stroke-width="2" marker-end="url(#ah)">
+      <line x1="330" y1="125" x2="400" y2="125"/>
+    </g>
+    <text x="365" y="116" fill="#ffc08a" font-size="11" text-anchor="middle">每帧</text>
+    <!-- DWM -->
+    <rect x="410" y="70" width="200" height="110" rx="12" fill="#171b24" stroke="#2b3340"/>
+    <text x="510" y="100" fill="#e6edf3" font-size="13" text-anchor="middle">DWM 合成</text>
+    <text x="510" y="124" fill="#ffc08a" font-size="11" text-anchor="middle">整窗 Alpha 混合</text>
+    <text x="510" y="146" fill="#ffc08a" font-size="11" text-anchor="middle">× DPR 1.5 放大</text>
+    <text x="510" y="166" fill="#ffc08a" font-size="11" text-anchor="middle">≈CPU 持续占用</text>
+    <defs><marker id="ah" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#ffc08a"/></marker></defs>
+  </svg>
+  <p class="note">即便「只 blit 一层缓存位图」，只要窗口是半透明的，DWM 仍要在每一帧重新把整块表面与桌面合成。这是「半透明 + 每帧重绘」的固有税。</p>
+</div>
+
+<div class="card">
+  <h2>③ 新根治：辉光提成独立顶层窗，脉搏交给 windowOpacity</h2>
+  <svg viewBox="0 0 680 230" xmlns="http://www.w3.org/2000/svg" style="max-width:680px">
+    <rect x="0" y="0" width="680" height="230" fill="#0f1117"/>
+    <text x="340" y="26" fill="#9aa7b4" font-size="14" text-anchor="middle">新：辉光独立顶层窗，呼吸只改 windowOpacity</text>
+    <!-- 主窗口 -->
+    <rect x="40" y="50" width="260" height="150" rx="12" fill="#171b24" stroke="#2b3340"/>
+    <text x="170" y="74" fill="#e6edf3" font-size="13" text-anchor="middle">主窗口（不透明）</text>
+    <rect x="60" y="92" width="100" height="40" rx="6" fill="#1f2530" stroke="#2b3340"/>
+    <text x="110" y="117" fill="#9aa7b4" font-size="11" text-anchor="middle">卡片</text>
+    <!-- 辉光顶层窗（独立） -->
+    <rect x="320" y="50" width="260" height="150" rx="12" fill="#171b24" stroke="#2b3340"/>
+    <text x="450" y="74" fill="#e6edf3" font-size="13" text-anchor="middle">辉光顶层窗（拥有于主窗）</text>
+    <rect x="340" y="92" width="220" height="90" rx="10" fill="#7fd1ff" opacity="0.25"/>
+    <text x="450" y="140" fill="#7fd1ff" font-size="11" text-anchor="middle">满亮辉光位图（一次烘焙）</text>
+    <!-- 脉冲箭头 -->
+    <g stroke="#7ee787" stroke-width="2" marker-end="url(#ag)">
+      <line x1="300" y1="125" x2="320" y2="125"/>
+    </g>
+    <text x="310" y="116" fill="#7ee787" font-size="11" text-anchor="middle">只改</text>
+    <text x="310" y="150" fill="#7ee787" font-size="11" text-anchor="middle">透明度</text>
+    <!-- DWM -->
+    <rect x="610" y="70" width="0" height="0" fill="none"/>
+    <text x="610" y="100" fill="#7ee787" font-size="13" text-anchor="end">DWM：仅 alpha 乘法</text>
+    <text x="610" y="122" fill="#7ee787" font-size="11" text-anchor="end">不重新光栅化像素</text>
+    <text x="610" y="144" fill="#7ee787" font-size="11" text-anchor="end">每帧 CPU ≈ 0</text>
+    <defs><marker id="ag" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0, 6 Z" fill="#7ee787"/></marker></defs>
+  </svg>
+  <p><b>关键点：</b>辉光位图只在「尺寸/DPR/颜色」变化时烘焙一次（<code>_rebuild_glow_cache</code>，按 1.0 满亮）。呼吸与失焦暗化只是把窗口整体 alpha 乘上一个系数，由 DWM 在合成阶段完成——这一步不碰像素、不进 CPU 渲染管线。</p>
+</div>
+
+<div class="card">
+  <h2>④ 为什么还要「拆」出一个边框/蒙版层？</h2>
+  <p><code>setWindowOpacity</code> 调制的是<b>整窗</b> alpha——如果边框和编辑蒙版和辉光挤在同一个窗口，它们会被一起「呼吸」。但：</p>
+  <ul>
+    <li>托盘白边（alpha 55）需要<b>失焦时保持</b>（原设计就是「边框不随失焦变暗」）；</li>
+    <li>编辑蒙版（暗色叠加）需要<b>编辑期间保持</b>恒定，保证控件对比度——一旦随呼吸脉动，编辑器文字会忽明忽暗。</li>
+  </ul>
+  <p>所以把「托盘边框 + 编辑蒙版」拆到新的 <span class="pill">_GlowBorderOverlay</span> 独立窗口（windowOpacity 恒为 1.0，只在几何/主题/编辑态变更时重绘）。辉光窗只管「呼吸」，边框/蒙版窗只管「稳定」。两者都由主窗拥有、位于主窗之上、编辑蒙版之下。</p>
+</div>
+
+<div class="card">
+  <h2>⑤ 代码改动清单（app_window.py）</h2>
+  <table>
+    <tr><th>位置</th><th>改动</th></tr>
+    <tr><td>新增 <code>_GlowBorderOverlay</code></td><td>独立顶层窗，仅绘制托盘边框 + 编辑蒙版（<code>_paint_tray_border</code>），不随呼吸脉动</td></tr>
+    <tr><td><code>_GlowOverlay.__init__</code></td><td>（上轮已完成）提成「由主窗拥有的独立顶层窗口」；paintEvent 手动裁圆角避免辉光四角溢出</td></tr>
+    <tr><td><code>_paint_glow_layer</code></td><td>去掉 <code>p.setOpacity(a*glow_dim)</code> 与托盘边框调用，改为只画「满亮」辉光缓存位图；脉动交由 windowOpacity</td></tr>
+    <tr><td><code>_on_breath</code> / <code>_dim_tick</code></td><td><code>ov.update()</code> → <code>ov.setWindowOpacity(breath_alpha * glow_dim)</code>；用 <code>_fading</code> 守卫避免与淡入淡出冲突</td></tr>
+    <tr><td><code>_repaint_glow</code></td><td>一并触发 <code>_glow_border</code> 重绘（几何/主题/编辑态变更）</td></tr>
+    <tr><td><code>resizeEvent</code></td><td>新增 <code>_glow_border</code> 几何同步（与原辉光层一致）</td></tr>
+    <tr><td><code>_fade_out_then_hide</code> / <code>_fade_in_from_tray</code></td><td>增加与主窗并行的辉光 windowOpacity 动画；新增 <code>_clear_fading</code> 守卫</td></tr>
+    <tr><td><code>set_breath_enabled</code></td><td>关闭呼吸时把辉光窗口锁定到峰值亮度（不再停在暗相位）</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h2>⑥ 验证 &amp; 掌机同步步骤</h2>
+  <ul>
+    <li class="ok">静态校验：<code>py_compile</code> 通过；<code>pyflakes</code> 无新增未定义名（仅历史未用导入）。</li>
+    <li class="warn">沙箱限制：Qt 窗口无法在本环境 headless 创建（RC=127，与既有 <code>test_app_window_gui</code> 同一现象），GUI 真机验证请在掌机完成。</li>
+    <li><b>掌机同步步骤：</b>
+      <ol>
+        <li>把改后的 <code>src/</code> 同步到掌机（或重新拉取源码）。</li>
+        <li>删除 <code>ningbingjue/src/__pycache__</code> 与 <code>ningbingjue/__pycache__</code>，避免旧字节码残留。</li>
+        <li>按 2026-08-18 约定<b>手动重建 exe</b>（<code>build_exe.py</code>，先 <code>env -u CODEBUDDY_SESSION_ID -u CLAUDE_SESSION_ID</code>），再覆盖 portable。</li>
+        <li>运行后重点观察：① 开呼吸灯滚动卡片列表是否顺滑；② 失焦/回游戏时辉光是否平滑暗化/恢复；③ 打开布局编辑页时蒙版对比度稳定；④ 最小化到托盘时辉光不留「亮块」。</li>
+        <li>可选取证：<code>set NBJ_PROFILE=1 &amp;&amp; launch.bat</code> 跑一段，看 <code>logs/nbj_profile.log</code> 的辉光重绘热点是否消失。</li>
+      </ol>
+    </li>
+  </ul>
+</div>
+
+<footer>凝冰结魄 · 呼吸灯性能治理 · 由 WorkBuddy 实施 · 2026-08-29</footer>
+</div>
+</body>
+</html>

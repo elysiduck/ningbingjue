@@ -1,0 +1,322 @@
+#src N/A
+#dst N/A
+#end
+
+#src Sensor
+#dst 传感器
+#end
+#src Value
+#dst 值
+#end
+
+#src Sensors exported to %s!
+#dst 传感器导出到%s!
+#end
+
+#src Source
+#dst 来源
+#end
+
+#src Temperature
+#dst 温度
+#end
+#src Voltage
+#dst 电压
+#end
+#src Fan speed
+#dst 风扇转速
+#end
+#src Current
+#dst 当前
+#end
+#src Power
+#dst 功耗
+#end
+#src Clock
+#dst 频率
+#end
+#src Usage
+#dst 利用率
+#end
+#src Other
+#dst 其他
+#end
+
+#src GPU temperature
+#dst GPU温度
+#end
+#src PCB temperature
+#dst 环境温度
+#end
+#src Memory temperature
+#dst 内存温度
+#end
+#src VRM temperature
+#dst VRM温度
+#end
+#src Fan speed
+#dst 风扇转速
+#end
+#src Fan tachometer
+#dst 风扇转速表
+#end
+#src Core clock
+#dst 核心频率
+#end
+#src Shader clock
+#dst 着色器频率
+#end
+#src Memory clock
+#dst 内存频率
+#end
+#src GPU usage
+#dst GPU利用率
+#end
+#src Memory usage
+#dst 内存利用率
+#end
+#src FB usage
+#dst FB利用率
+#end
+#src VID usage
+#dst VID利用率
+#end
+#src BUS usage
+#dst BUS利用率
+#end
+#src GPU voltage
+#dst GPU电压
+#end
+#src Aux voltage
+#dst 补偿电压
+#end
+#src Memory voltage
+#dst 内存电压
+#end
+#src Framerate
+#dst 帧速率
+#end
+#src Frametime
+#dst 帧时间
+#end
+#src Framerate Min
+#dst 帧速率最小值
+#end
+#src Framerate Avg
+#dst 帧速率平均值
+#end
+#src Framerate Max
+#dst 帧速率最大值
+#end
+#src Framerate 1% Low
+#dst 帧速率低于1%
+#end
+#src Framerate 0.1% Low
+#dst 帧速率低于0.1%
+#end
+#src Power
+#dst 功率
+#end
+
+#src Temp limit
+#dst 温度限制
+#end
+#src Power limit
+#dst 功率限制
+#end
+#src Voltage limit
+#dst 电压限制
+#end
+#src No load limit
+#dst 无负载限制
+#end
+#src CPU usage
+#dst CPU利用率
+#end
+#src RAM usage
+#dst RAM利用率
+#end
+#src Commit charge
+#dst 已分配内存
+#end
+#src CPU temperature
+#dst CPU温度
+#end
+#src SLI sync limit
+#dst SLI同步限制
+#end
+#src CPU clock
+#dst CPU频率
+#end
+#src Aux2 voltage
+#dst 补偿电压2
+#end
+#src GPU temperature 2
+#dst GPU温度2
+#end
+#src PCB temperature 2
+#dst 环境温度2
+#end
+#src Memory temperature 2
+#dst 内存温度2
+#end
+#src VRM temperature 2
+#dst VRM温度2
+#end
+#src GPU temperature 3
+#dst GPU温度3
+#end
+#src PCB temperature 3
+#dst 环境温度3
+#end
+#src Memory temperature 3
+#dst 内存温度3
+#end
+#src VRM temperature 3
+#dst VRM温度3
+#end
+#src GPU temperature 4
+#dst GPU温度4
+#end
+#src PCB temperature 4
+#dst 环境温度4
+#end
+#src Memory temperature 4
+#dst 内存温度4
+#end
+#src VRM temperature 4
+#dst VRM温度4
+#end
+#src GPU temperature 5
+#dst GPU温度5
+#end
+#src PCB temperature 5
+#dst 环境温度5
+#end
+#src Memory temperature 5
+#dst 内存温度5
+#end
+#src VRM temperature 5
+#dst VRM温度5
+#end
+#src <GPU plugin>
+#dst <GPU插件>
+#end
+#src <CPU plugin>
+#dst <CPU插件>
+#end
+#src <motherboard plugin>
+#dst <主板插件>
+#end
+#src <RAM plugin>
+#dst <内存插件>
+#end
+#src <HDD plugin>
+#dst <硬盘插件>
+#end
+#src <NET plugin>
+#dst <网络插件>
+#end
+#src <PSU plugin>
+#dst <PSU插件>
+#end
+#src <UPS plugin>
+#dst <UPS插件>
+#end
+#src <miscellaneous plugin>
+#dst <其他插件>
+#end
+#src CPU power
+#dst CPU功耗
+#end
+
+#src Failed to initialize Direct3D!
+#dst 初始化Direct3D失败!
+#end
+
+#src nameless
+#dst 无名
+#end
+#src Overlay editor - %s
+#dst 叠加编辑器 - %s
+#end
+#src Undo / Redo : %d / %d
+#dst 撤销 / 重做 : %d / %d
+#end
+#src Undo : %d
+#dst 撤销 :  %d
+#end
+#src Undo / Redo
+#dst 撤销 / 重做
+#end
+#src Layer %d of %d\tPos (%d, %d)\tExt (%d, %d)
+#dst 图层 %d 来自 %d\t位置 (%d, %d)\t尺寸 (%d, %d)
+#end
+#src Layer info
+#dst 图层信息
+#end
+#src \tHypertext %d / %d\tBuffer %d / %d
+#dst \t超文本 %d / %d\t缓冲 %d / %d
+#end
+#src Do you want to save changes in %s overlay layout?
+#dst 你想保存 %s 叠加布局中的变化吗？
+#end
+#src Overlay layout files (*.ovl)|*.ovl||
+#dst 叠加布局文件 (*.ovl)|*.ovl||
+#end
+#src PNG image files (*.png)|*.png||
+#dst PNG图像文件 (*.png)|*.png||
+#end
+#src Warning! This will set your On-Screen Display rendering mode, raster font and zoom settings to layout creator's ones. Do you want to continue?
+#dst 警告! 这将把你的屏幕显示渲染模式、光栅字体和缩放设置设置为布局创建者的设置。你想继续吗？
+#end
+#src Cur (%d, %d)\tPos (%d, %d)\tExt (%d, %d)
+#dst Cur (%d, %d)\t位置 (%d, %d)\t尺寸 (%d, %d)
+#end
+
+#src Table
+#dst 表
+#end
+#src Line
+#dst 行
+#end
+#src Cell
+#dst 单元格
+#end
+#src <nameless>
+#dst <无名>
+#end
+#src <separator>
+#dst <分隔符>
+#end
+#src <no binding>
+#dst <无绑定>
+#end
+
+#src Internal HAL
+#dst 内部硬件抽象层
+#end
+#src Windows performance counter
+#dst Windows性能计数器
+#end
+
+#src Layer %d of %d\tPos (%s, %s)\tExt (%d, %d)
+#dst 图层 %d 来自 %d\t位置 (%s, %s)\t尺寸 (%d, %d)
+#end
+
+#src left
+#dst 左部
+#end
+#src center
+#dst 中心
+#end
+#src right
+#dst 右部
+#end
+#src top
+#dst 顶部
+#end
+#src bottom
+#dst 底部
+#end
+

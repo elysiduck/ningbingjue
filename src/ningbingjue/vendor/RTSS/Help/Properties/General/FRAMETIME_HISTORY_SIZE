@@ -1,0 +1,5 @@
+Frametime history overlay size
+Allows adjusting width and height of frametime history overlay graph. You may use positive values to specify size in pixels or negative values to specify size in symbols.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

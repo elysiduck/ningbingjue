@@ -1,0 +1,121 @@
+RELIABLE PER-TEST BASELINE REPORT
+============================================================
+totals: {'CRASH': 32, 'PASSED': 524, 'FAILED': 21}
+
+[tests\test_app_integration.py] total=0 not_passed=0
+[tests\test_app_window_gui.py] total=0 not_passed=0
+[tests\test_breathing.py] total=0 not_passed=0
+[tests\test_breathing_gui.py] total=0 not_passed=0
+[tests\test_btnlist_clone_width.py] total=0 not_passed=0
+[tests\test_button_edit.py] total=0 not_passed=0
+[tests\test_button_editor_all_pages.py] total=0 not_passed=0
+[tests\test_button_editor_pagenav_widths.py] total=0 not_passed=0
+[tests\test_color.py] total=0 not_passed=0
+[tests\test_config.py] total=0 not_passed=0
+[tests\test_ec_io_locate.py] total=0 not_passed=0
+[tests\test_edit_nav_dispatch.py] total=0 not_passed=0
+[tests\test_edit_overlay.py] total=0 not_passed=0
+[tests\test_fan_auto_route.py] total=0 not_passed=0
+[tests\test_fan_block_smoke.py] total=0 not_passed=0
+[tests\test_fan_detect_device.py] total=0 not_passed=0
+[tests\test_fan_detect_persist.py] total=0 not_passed=0
+[tests\test_fan_hysteresis.py] total=0 not_passed=0
+[tests\test_focus_color_hex_safety.py] total=0 not_passed=0
+[tests\test_focus_opacity_zero.py] total=0 not_passed=0
+[tests\test_freeze.py] total=0 not_passed=0
+[tests\test_freeze_vdesktop.py] total=0 not_passed=0
+[tests\test_gamepad_resume.py] total=0 not_passed=0
+[tests\test_hwinfo_smi.py] total=0 not_passed=0
+[tests\test_interaction.py] total=0 not_passed=0
+[tests\test_layout_pagination.py] total=0 not_passed=0
+[tests\test_ls.py] total=0 not_passed=0
+[tests\test_metric_sampler_job_object.py] total=0 not_passed=0
+[tests\test_nav_skip_tile.py] total=0 not_passed=0
+[tests\test_navigation.py] total=0 not_passed=0
+[tests\test_own_popup_focus.py] total=0 not_passed=0
+[tests\test_page_switch_survival.py] total=0 not_passed=0
+[tests\test_pagination_pure.py] total=0 not_passed=0
+[tests\test_panels.py] total=0 not_passed=0
+[tests\test_perfmon_panel_width.py] total=0 not_passed=0
+[tests\test_platform.py] total=0 not_passed=0
+[tests\test_popup_quit_on_close.py] total=0 not_passed=0
+[tests\test_port_fixes.py] total=0 not_passed=0
+[tests\test_power.py] total=0 not_passed=0
+[tests\test_power_panel_debounce.py] total=0 not_passed=0
+[tests\test_power_resume_reapply.py] total=0 not_passed=0
+[tests\test_process_manager_wmic.py] total=0 not_passed=0
+[tests\test_procmon.py] total=0 not_passed=0
+[tests\test_procmon_ahk.py] total=0 not_passed=0
+[tests\test_procmon_edit_fix.py] total=0 not_passed=0
+[tests\test_procmon_enum_decode.py] total=0 not_passed=0
+[tests\test_real_adapters.py] total=0 not_passed=0
+[tests\test_render_pages.py] total=0 not_passed=0
+[tests\test_restart.py] total=0 not_passed=0
+[tests\test_rtss.py] total=0 not_passed=0
+[tests\test_rtss_autolock.py] total=0 not_passed=0
+[tests\test_rtss_smi.py] total=0 not_passed=0
+[tests\test_skin.py] total=0 not_passed=0
+[tests\test_slider_apply_method.py] total=0 not_passed=0
+[tests\test_smt_lock_force.py] total=0 not_passed=0
+[tests\test_themes.py] total=0 not_passed=0
+[tests\test_tile.py] total=0 not_passed=0
+[tests\test_tile_report_optimizations.py] total=0 not_passed=0
+[tests\test_tile_ui.py] total=0 not_passed=0
+[tests\test_timers.py] total=0 not_passed=0
+[tests\test_ui.py] total=0 not_passed=0
+[tests\test_undervolt.py] total=0 not_passed=0
+
+--- NOT PASSED ---
+CRASH  tests/test_app_integration.py::test_backward_compat_shims_wired
+CRASH  tests/test_app_window_gui.py::test_default_accent_paints_without_error
+CRASH  tests/test_app_window_gui.py::test_custom_breath_color_paints_without_error
+FAILED  tests/test_breathing.py::test_default_controller_reproduces_original_curve
+CRASH  tests/test_app_integration.py::test_procmon_toggle_via_shim
+CRASH  tests/test_breathing.py::test_set_period_changes_step
+CRASH  tests/test_edit_overlay.py::test_gamepad_face_buttons_emit
+CRASH  tests/test_edit_overlay.py::test_gamepad_stick_navigates
+CRASH  tests/test_edit_overlay.py::test_gamepad_moves_selected_tile
+CRASH  tests/test_edit_overlay.py::test_gamepad_hint_badge_on_buttons
+CRASH  tests/test_interaction.py::test_enter_activates_focused_item
+CRASH  tests/test_interaction.py::test_arrow_navigation_moves_focus
+CRASH  tests/test_interaction.py::test_page_jump_moves_between_panels
+CRASH  tests/test_interaction.py::test_tab_steps_through_all_items
+CRASH  tests/test_interaction.py::test_refresh_does_not_fire_on_focus
+CRASH  tests/test_interaction.py::test_slider_arrow_nudges_value
+CRASH  tests/test_interaction.py::test_esc_clears_focus
+FAILED  tests/test_metric_sampler_job_object.py::test_make_kill_on_close_job_succeeds
+FAILED  tests/test_metric_sampler_job_object.py::test_stop_closes_job_handle
+FAILED  tests/test_metric_sampler_job_object.py::test_attach_gives_up_on_assign_failure
+FAILED  tests/test_metric_sampler_job_object.py::test_attach_gives_up_on_no_handle
+FAILED  tests/test_metric_sampler_job_object.py::test_second_popen_reuses_same_job
+FAILED  tests/test_metric_sampler_job_object.py::test_make_job_none_disables_attach
+CRASH  tests/test_navigation.py::test_navigation_controller_page_wrap
+FAILED  tests/test_perfmon_panel_width.py::test_perfmon_value_labels_single_line
+CRASH  tests/test_power.py::test_gpu_float_warns_on_counter_corruption
+CRASH  tests/test_procmon.py::test_navigation_cycles_focus
+CRASH  tests/test_procmon.py::test_item_confirm_toggles_focused
+CRASH  tests/test_restart.py::test_restart_frozen_gui_present
+FAILED  tests/test_restart.py::test_restart_frozen_gui_inserted_when_missing
+CRASH  tests/test_restart.py::test_restart_nonfrozen_forces_gui
+FAILED  tests/test_restart.py::test_restart_popen_failure_falls_back_to_execl
+CRASH  tests/test_restart.py::test_restart_persists_and_hides_editor
+CRASH  tests/test_rtss.py::test_navigation_confirm_toggles_on_lock_button
+CRASH  tests/test_rtss.py::test_navigation_slider_adjust_changes_fps
+FAILED  tests/test_rtss_autolock.py::test_fallback_to_baseline_after_fall_ticks
+CRASH  tests/test_skin.py::test_overlay_offscreen_builds_and_paints
+CRASH  tests/test_skin.py::test_main_action_hints
+CRASH  tests/test_skin.py::test_ls_nav_items_carry_gamepad_hints
+FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_debounce_applies
+FAILED  tests/test_slider_apply_method.py::test_fan_keyboard_nudge_does_not_arm_timer
+FAILED  tests/test_slider_apply_method.py::test_fan_keyboard_nudge_then_confirm_applies
+FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_no_apply_when_not_applied
+FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_no_apply_in_auto_mode
+FAILED  tests/test_themes.py::test_apply_theme_sets_state_and_freeze_highlight
+CRASH  tests/test_tile.py::test_launch_records_calls
+CRASH  tests/test_tile.py::test_navigation_matrix
+FAILED  tests/test_tile_report_optimizations.py::test_extra_tile_block_persists_round_trip
+FAILED  tests/test_tile_report_optimizations.py::test_edit_items_opens_extra_block_editor
+FAILED  tests/test_tile_report_optimizations.py::test_edit_extra_block_syncs_hud_and_config
+FAILED  tests/test_tile_report_optimizations.py::test_delete_extra_block_removes_it
+CRASH  tests/test_tile_ui.py::test_tile_panel_2d_matrix_and_icon
+CRASH  tests/test_tile_ui.py::test_tile_block_name_and_color_apply_to_hud

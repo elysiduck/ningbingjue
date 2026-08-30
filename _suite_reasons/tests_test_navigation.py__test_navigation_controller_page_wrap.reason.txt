@@ -1,0 +1,27 @@
+tests/test_navigation.py::test_navigation_controller_page_wrap
+STATUS=CRASH
+____________________ test_navigation_controller_page_wrap _____________________
+    def test_navigation_controller_page_wrap():
+        registry = BlockRegistry()
+        refreshed: list[str] = []
+        card_a, card_b = object(), object()
+        registry.register(Block(type="rtss", name="rtss", color=Color(), card=card_a,
+                                hooks={"OnRefresh": lambda: refreshed.append("rtss")}))
+        registry.register(Block(type="ls", name="ls", color=Color(), card=card_b,
+                                hooks={"OnRefresh": lambda: refreshed.append("ls")}))
+        cfg = AppConfig.from_dict({"Cards": ["rtss", "ls"], "PageBreaks": [0, 1]})
+        cm = ConfigManager()
+        cm.config = cfg
+        nav = NavigationController(registry, cm)
+        assert nav.total_pages() == 2
+        nav.switch_page(1)  # wrap to page 1
+        assert nav.current_page == 1
+>       assert refreshed == ["ls"]
+E       AssertionError: assert [] == ['ls']
+E         
+E         Right contains one more item: 'ls'
+E         Use -v to get more diff
+tests\test_navigation.py:112: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_navigation.py::test_navigation_controller_page_wrap - Asser...
+1 failed in 0.26s

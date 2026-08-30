@@ -1,0 +1,1048 @@
+[Master]
+Implementation=2
+FontFace=Terminal
+FontHeight=-7
+FontWeight=700
+ZoomRatio=2
+[Settings]
+Name=
+EnvVars=
+RefreshPeriod=1000
+LockUserSettings=0
+EmbeddedImage=
+PingAddr=
+[General]
+Sources=63
+Tables=0
+Layers=56
+[Source0]
+Name=FPS MAX
+Units=
+Format=
+Formula=""Framerate""
+Provider=HAL
+ID=FPS MAX
+[Source1]
+Name=FPS-AMD
+Units=
+Format=
+Formula=
+Provider=LHM
+ID=/gpu-amd/0/factor/0
+[Source2]
+Name=GPU1 power
+Units=W
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 power
+[Source3]
+Name=AMD TDP
+Units=W
+Format=
+Formula=x - 0.499
+Provider=LHM
+ID=/amdcpu/0/power/0
+[Source4]
+Name=Intel TDP
+Units=W
+Format=
+Formula=x - 0.499
+Provider=LHM
+ID=/intelcpu/0/power/0
+[Source5]
+Name=AMD CPU clock MAX
+Units=GHz
+Format=%0.1f
+Formula=max("AMD CPU Core1", "AMD CPU Core2")
+Provider=HAL
+ID=AMD CPU clock MAX
+[Source6]
+Name=AMD CPU Core1
+Units=GHz
+Format=%0.1f
+Formula=X/1000
+Provider=LHM
+ID=/amdcpu/0/clock/1
+[Source7]
+Name=AMD CPU Core2
+Units=GHz
+Format=%0.1f
+Formula=X/1000
+Provider=LHM
+ID=/amdcpu/0/clock/2
+[Source8]
+Name=Intel CPU clock MAX
+Units=GHz
+Format=%0.1f
+Formula=max("Intel CPU Core1", "Intel CPU Core2")
+Provider=HAL
+ID=Intel CPU clock MAX
+[Source9]
+Name=Intel CPU Core1
+Units=GHz
+Format=%0.1f
+Formula=X/1000
+Provider=LHM
+ID=/intelcpu/0/clock/1
+[Source10]
+Name=Intel CPU Core2
+Units=GHz
+Format=%0.1f
+Formula=X/1000
+Provider=LHM
+ID=/intelcpu/0/clock/2
+[Source11]
+Name=AMD CPU Core Max usage
+Units=%
+Format=
+Formula=
+Provider=LHM
+ID=/amdcpu/0/load/1
+[Source12]
+Name=Intel CPU Core Max usage
+Units=%
+Format=
+Formula=
+Provider=LHM
+ID=/intelcpu/0/load/1
+[Source13]
+Name=Is4CoreLayout
+Units=
+Format=
+Formula=cpucount < 9
+Provider=HAL
+ID=stub
+[Source14]
+Name=Is8CoreLayout
+Units=
+Format=
+Formula=cpucount < 8
+Provider=HAL
+ID=stub
+[Source15]
+Name=Is16CoreLayout
+Units=
+Format=
+Formula=cpucount > 8
+Provider=HAL
+ID=stub
+[Source16]
+Name=CPU1 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU1 usage
+[Source17]
+Name=CPU2 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU2 usage
+[Source18]
+Name=CPU3 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU3 usage
+[Source19]
+Name=CPU4 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU4 usage
+[Source20]
+Name=CPU5 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU5 usage
+[Source21]
+Name=CPU6 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU6 usage
+[Source22]
+Name=CPU7 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU7 usage
+[Source23]
+Name=CPU8 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU8 usage
+[Source24]
+Name=CPU9 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU9 usage
+[Source25]
+Name=CPU10 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU10 usage
+[Source26]
+Name=CPU11 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU11 usage
+[Source27]
+Name=CPU12 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU12 usage
+[Source28]
+Name=CPU13 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU13 usage
+[Source29]
+Name=CPU14 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU14 usage
+[Source30]
+Name=CPU15 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU15 usage
+[Source31]
+Name=CPU16 usage
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=CPU16 usage
+[Source32]
+Name=GPU 1 clock
+Units=GHz
+Format=%0.1f
+Formula=x/1000
+Provider=HAL
+ID=GPU1 clock
+[Source33]
+Name=AMD GPU Core
+Units=GHz
+Format=%0.1f
+Formula=x/1000
+Provider=LHM
+ID=/gpu-amd/0/clock/0
+[Source34]
+Name=Nvidia GPU Core
+Units=GHz
+Format=%0.1f
+Formula=x/1000
+Provider=LHM
+ID=/gpu-nvidia/0/clock/0
+[Source35]
+Name=Intel GPU Core
+Units=GHz
+Format=%0.1f
+Formula=x/1000
+Provider=LHM
+ID=/gpu-intel/0/clock/0
+[Source36]
+Name=Nvidia GPU Package
+Units=W
+Format=
+Formula=
+Provider=LHM
+ID=/gpu-nvidia/0/power/0
+[Source37]
+Name=GPU Core
+Units=W
+Format=
+Formula=
+Provider=LHM
+ID=/gpu-amd/0/power/0
+[Source38]
+Name=AMD GPU usage 1
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 usage
+[Source39]
+Name=AMD GPU usage 2
+Units=%
+Format=
+Formula=
+Provider=LHM
+ID=/gpu-amd/0/load/2
+[Source40]
+Name=AMD GPU1 memory usage
+Units=GB
+Format=%0.1f
+Formula=x/1000
+Provider=HAL
+ID=GPU1 memory usage
+[Source41]
+Name=AMD GPU1 memory usage percent
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=GPU1 memory usage percent
+[Source42]
+Name=AMD TEMP
+Units=C
+Format=
+Formula=
+Provider=LHM
+ID=/amdcpu/0/temperature/2
+[Source43]
+Name=Intel TEMP
+Units=C
+Format=
+Formula=
+Provider=LHM
+ID=/intelcpu/0/temperature/2
+[Source44]
+Name=HDD TEMP MAX
+Units=C
+Format=
+Formula=max("HDD1 temperature", "HDD1 temperature 2")
+Provider=HAL
+ID=HDD TEMP MAX
+[Source45]
+Name=HDD1 temperature
+Units=C
+Format=
+Formula=
+Provider=HAL
+ID=HDD1 temperature
+[Source46]
+Name=HDD1 temperature 2
+Units=C
+Format=
+Formula=
+Provider=HAL
+ID=HDD1 temperature 2
+[Source47]
+Name=WIFI
+Units=" MB"
+Format=%0.1f
+Formula=("IPv4 Datagrams"+ "IPv6 Datagrams")/100
+Provider=HAL
+ID=CPU1 usage
+[Source48]
+Name=IPv4 Datagrams
+Units=
+Format=
+Formula=
+Provider=PerfCounter
+ObjectName=IPv4
+CounterName=Datagrams/sec
+Dynamic=1
+[Source49]
+Name=IPv6 Datagrams
+Units=
+Format=
+Formula=
+Provider=PerfCounter
+ObjectName=IPv6
+CounterName=Datagrams/sec
+Dynamic=1
+[Source50]
+Name=HDD
+Units=MB
+Format=%0.1f
+Formula=""FileSystem Bytes Written"+ "FileSystem Bytes Read""
+Provider=HAL
+ID=HDD
+[Source51]
+Name=FileSystem Bytes Written
+Units=MB
+Format=%0.1f
+Formula=X/1000000
+Provider=PerfCounter
+ObjectName=FileSystem Disk Activity
+InstanceIndex=0
+CounterName=FileSystem Bytes Written
+Dynamic=1
+[Source52]
+Name=FileSystem Bytes Read
+Units=MB
+Format=%0.1f
+Formula=X/1000000
+Provider=PerfCounter
+ObjectName=FileSystem Disk Activity
+InstanceIndex=0
+CounterName=FileSystem Bytes Read
+Dynamic=1
+[Source53]
+Name=Charge Rate
+Units=Wh
+Format=
+Formula=x/1000
+Provider=PerfCounter
+ObjectName=Battery Status
+InstanceName=ACPI\PNP0C0A\1_0
+CounterName=Charge Rate
+Dynamic=1
+[Source54]
+Name=DischargeRate
+Units=Wh
+Format=
+Formula=x/1000
+Provider=PerfCounter
+ObjectName=BatteryStatus
+InstanceIndex=0
+CounterName=DischargeRate
+Dynamic=1
+[Source55]
+Name=RemainingCapacity
+Units=Wh
+Format=
+Formula=x/1000
+Provider=PerfCounter
+ObjectName=BatteryStatus
+InstanceIndex=0
+CounterName=RemainingCapacity
+Dynamic=1
+[Source56]
+Name=Estimated Remaining Time
+Units=H
+Format=%0.1f
+Formula=""RemainingCapacity" / "DischargeRate""
+Provider=PerfCounter
+ObjectName=Estimated Remaining Time
+InstanceName=ACPI\PNP0C0A\1_0
+CounterName=Estimated Remaining Time
+Dynamic=1
+[Source57]
+Name=BATT Estimated Remaining Time
+Units=H
+Format=%0.1f
+Formula=""RemainingCapacity" / "DischargeRate""
+Provider=HAL
+ID=BATT Estimated Remaining Time
+[Source58]
+Name=RAM usage percent
+Units=%
+Format=
+Formula=
+Provider=HAL
+ID=RAM usage percent
+[Source59]
+Name=RAM usage
+Units=GB
+Format=%0.1f
+Formula=x/1000
+Provider=HAL
+ID=RAM usage
+[Source60]
+Name=VARM usage
+Units=%
+Format=
+Formula=("D3D Dedicated Memory Used"/"D3D Dedicated Memory Total")*100
+Provider=HAL
+ID=VARM usage
+[Source61]
+Name=D3D Dedicated Memory Total
+Units=G
+Format=%0.1f
+Formula=X/1000
+Provider=LHM
+ID=/gpu-amd/0/smalldata/5
+[Source62]
+Name=D3D Dedicated Memory Used
+Units=G
+Format=%0.1f
+Formula=x/1000
+Provider=LHM
+ID=/gpu-amd/0/smalldata/3
+[Layer0]
+Name=YeMan RTSS
+Text=
+PositionSticky=1
+ExtentX=-95
+ExtentY=-2
+ExtentOrigin=5
+FixedAlignment=1
+Size=200
+BgndColor=28000000
+[Layer1]
+Name=MS
+Text=<G=Frametime,40,8,0,1,80,0>
+PositionSticky=1
+ExtentX=-94
+ExtentY=-2
+ExtentOrigin=6
+Size=50
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer2]
+Name=Framerate
+Text=FPS
+PositionSticky=1
+ExtentX=-94
+ExtentY=-2
+ExtentOrigin=3
+Size=120
+TextColor=CDFF5151
+[Layer3]
+Name=Framerate
+Text=%FPS MAX%
+PositionSticky=1
+ExtentX=-86
+ExtentY=-2
+ExtentOrigin=3
+Size=160
+TextColor=1000000,1,99999,FFFFFF,-9999,1(FPS-AMD,0)
+RefreshPeriod=500
+[Layer4]
+Name=Framerate-AMD
+Text=%FPS-AMD%
+PositionSticky=1
+ExtentX=-86
+ExtentY=-2
+ExtentOrigin=3
+Size=160
+TextColor=1000000,-999,1,FFFFFF,1,999,1000000,999,9999(FPS-AMD,0)
+RefreshPeriod=500
+[Layer5]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-76
+ExtentY=-2
+ExtentOrigin=3
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer6]
+Name=Framerate
+Text=TDP
+PositionSticky=1
+ExtentX=-74
+ExtentY=-2
+ExtentOrigin=0
+Size=120
+TextColor=CDFA8200
+[Layer7]
+Name=Dx12
+Text=<APP>
+PositionSticky=1
+ExtentX=-74
+ExtentY=-2
+ExtentOrigin=6
+Size=80
+TextColor=57FFFFFF
+RefreshPeriod=5000
+[Layer8]
+Name=TDP
+Text=%AMD TDP%
+PositionSticky=1
+ExtentX=-66
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer9]
+Name=TDP
+Text=%Intel TDP%
+PositionSticky=1
+ExtentX=-66
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer10]
+Name=TDP
+Text=W
+PositionSticky=1
+ExtentX=-59
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=FFFFFF
+[Layer11]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-54
+ExtentY=-2
+ExtentOrigin=3
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer12]
+Name=CPU
+Text=CPU
+PositionSticky=1
+ExtentX=-52
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=120
+TextColor=C900A8E5
+[Layer13]
+Name=CPU Clock
+Text=%AMD CPU clock MAX%
+PositionSticky=1
+ExtentX=-42
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=00FFFFFF
+RefreshPeriod=1000
+[Layer14]
+Name=CPU Clock
+Text=%Intel CPU clock MAX%
+PositionSticky=1
+ExtentX=-42
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=00FFFFFF
+RefreshPeriod=1000
+[Layer15]
+Name=CPU usage bars \ 8 cores
+VisibilitySource=Is4CoreLayout
+Text=<G=CPU1 usage,2,-6,1,0,100,28><G=CPU2 usage><G=CPU3 usage><G=CPU4 usage><G=CPU5 usage><G=CPU6 usage><G=CPU7 usage><G=CPU8 usage>
+PositionSticky=1
+ExtentX=-52
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=25
+TextColor=4602ED21,,75,45FFFF00,75,95,45FF0000,95,(CPU clock,3)
+RefreshPeriod=500
+MarginLeft=1
+MarginTop=4
+[Layer16]
+Name=CPU usage bars \ 8 cores
+VisibilitySource=Is8CoreLayout
+Text=<G=CPU1 usage,-1,-6,1,0,100,28><G=CPU2 usage><G=CPU3 usage><G=CPU4 usage><G=CPU5 usage><G=CPU6 usage><G=CPU7 usage><G=CPU8 usage>
+PositionSticky=1
+ExtentX=-52
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=25
+TextColor=4602ED21,,75,45FFFF00,75,95,45FF0000,95,(CPU clock,3)
+RefreshPeriod=500
+MarginLeft=1
+MarginTop=4
+[Layer17]
+Name=CPU usage bars \ 16 cores
+VisibilitySource=Is16CoreLayout
+Text=<G=CPU1 usage,-1,-6,1,0,100,28><G=CPU2 usage><G=CPU3 usage><G=CPU4 usage><G=CPU5 usage><G=CPU6 usage><G=CPU7 usage><G=CPU8 usage><G=CPU9 usage><G=CPU10 usage><G=CPU11 usage><G=CPU12 usage><G=CPU13 usage><G=CPU14 usage><G=CPU15 usage><G=CPU16 usage>
+PositionSticky=1
+ExtentX=-52
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=25
+TextColor=4302ED21,,75,46FFFF00,75,95,4BFF0000,95,(CPU clock,3)
+RefreshPeriod=500
+MarginLeft=1
+MarginTop=4
+[Layer18]
+Name=CPU Clock
+Text=G
+PositionSticky=1
+ExtentX=-34
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=00FFFFFF
+[Layer19]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-30
+ExtentY=-2
+ExtentOrigin=3
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer20]
+Name=GPU
+Text=GPU
+PositionSticky=1
+ExtentX=-28
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=120
+TextColor=C900A349
+[Layer21]
+Name=Nvidia GPU Package
+Text=%Nvidia GPU Package%
+PositionSticky=1
+ExtentX=-28
+ExtentY=-2
+ExtentOrigin=6
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer22]
+Name=GPU Clock
+Text=%GPU 1 clock%
+PositionSticky=1
+ExtentX=-19
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=1000000,-99,0.1(GPU 1 clock,0)
+RefreshPeriod=1000
+[Layer23]
+Name=AMD GPU Clock
+Text=%AMD GPU Core%
+PositionSticky=1
+ExtentX=-19
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=1000000,0.2,9999999(GPU 1 clock,0)
+RefreshPeriod=1000
+[Layer24]
+Name=Nvidia GPU Clock
+Text=%Nvidia GPU Core%
+PositionSticky=1
+ExtentX=-19
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=1000000,0.2,9999999(GPU 1 clock,0)
+RefreshPeriod=1000
+[Layer25]
+Name=Intel GPU Clock
+Text=%Intel GPU Core%
+PositionSticky=1
+ExtentX=-19
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=1000000,0.2,9999999(GPU 1 clock,0)
+RefreshPeriod=1000
+[Layer26]
+Name=GPU  usage 1
+Text=<G=AMD GPU usage 2,-16,-5,1,0,100,1>
+PositionSticky=1
+ExtentX=-28
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=25
+TextColor=2502ED21
+RefreshPeriod=200
+MarginTop=6
+[Layer27]
+Name=GPU  usage 2
+Text=<G=AMD GPU usage 1,-16,-5,1,0,100,1>
+PositionSticky=1
+ExtentX=-28
+ExtentY=-2
+ExtentOrigin=0
+FixedAlignment=1
+Size=25
+TextColor=2502ED21
+RefreshPeriod=200
+MarginTop=6
+[Layer28]
+Name=GPU Clock
+Text=G
+PositionSticky=1
+ExtentX=-11
+ExtentY=-2
+ExtentOrigin=3
+Size=150
+TextColor=00FFFFFF
+[Layer29]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-7
+ExtentY=-2
+ExtentOrigin=3
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer30]
+Name=VRAM
+Text=VRAM
+PositionSticky=1
+ExtentX=-5
+ExtentY=-2
+ExtentOrigin=0
+Size=120
+TextColor=CDD1E000
+[Layer31]
+Name=GPU1 memory usage
+Text=%AMD GPU1 memory usage%
+PositionSticky=1
+ExtentX=-13
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=00FFFFFF
+RefreshPeriod=1000
+MarginLeft=1
+[Layer32]
+Name=GPU1 memory usage percent
+Text=<G=AMD GPU1 memory usage percent,-18,-5,1,0,100,1>
+PositionSticky=1
+ExtentX=-5
+ExtentY=-2
+ExtentOrigin=2
+FixedAlignment=1
+Size=25
+TextColor=4502ED21
+RefreshPeriod=1000
+MarginTop=6
+[Layer33]
+Name=vram
+Text=G
+PositionSticky=1
+ExtentX=-18
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=00FFFFFF
+[Layer34]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-19
+ExtentY=-2
+ExtentOrigin=5
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer35]
+Name=CPU
+Text=CPU
+PositionSticky=1
+ExtentX=-27
+ExtentY=-1
+ExtentOrigin=5
+TextColor=CD00B48C
+MarginRight=3
+[Layer36]
+Name=TEMP
+Text=TEMP
+PositionSticky=1
+ExtentX=-27
+ExtentY=-3
+ExtentOrigin=5
+Size=70
+TextColor=CD00B48C
+MarginRight=4
+[Layer37]
+Name=TEMP
+Text="%AMD TEMP% "
+PositionSticky=1
+ExtentX=-34
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=FFFFFF,0,85,FF0000,85.01,999(AMD TEMP,0)
+RefreshPeriod=1000
+[Layer38]
+Name=TEMP
+Text="%Intel TEMP% "
+PositionSticky=1
+ExtentX=-34
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=FFFFFF,0,85,FF0000,85.01,999(AMD TEMP,0)
+RefreshPeriod=1000
+[Layer39]
+Name=O
+Text=O
+PositionSticky=1
+ExtentX=-33
+ExtentY=-2
+ExtentOrigin=2
+Size=50
+TextColor=FFFFFF,0,85,FF0000,85.01,999(AMD TEMP,0)
+MarginLeft=4
+MarginTop=1
+[Layer40]
+Name=C
+VisibilitySource=Core (Tctl/Tdie)
+Text=C
+PositionSticky=1
+ExtentX=-37
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=FFFFFF,0,85,FF0000,85.01,999(AMD TEMP,0)
+MarginRight=2
+[Layer41]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-38
+ExtentY=-2
+ExtentOrigin=5
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer42]
+Name=WI-FI
+Text=WI-FI
+PositionSticky=1
+ExtentX=-47
+ExtentY=-2
+ExtentOrigin=2
+FixedAlignment=1
+TextColor=CD7FE1FF
+[Layer43]
+Name=WI-FI
+Text=%WIFI%M
+PositionSticky=1
+ExtentX=-56
+ExtentY=-1
+ExtentOrigin=8
+Size=80
+TextColor=FFFFFF
+RefreshPeriod=1000
+[Layer44]
+Name=SSD
+Text=SSD
+PositionSticky=1
+ExtentX=-46
+ExtentY=-2
+ExtentOrigin=8
+FixedAlignment=1
+TextColor=CD7FE1FF
+MarginLeft=1
+[Layer45]
+Name=SSD
+VisibilitySource=1%Low
+Text=%HDD%M
+PositionSticky=1
+ExtentX=-56
+ExtentY=-2
+ExtentOrigin=8
+Size=80
+[Layer46]
+Name=Battery Life
+Text=|
+PositionSticky=1
+ExtentX=-58
+ExtentY=-2
+ExtentOrigin=5
+FixedAlignment=1
+Size=150
+TextColor=82FFFFFF
+[Layer47]
+Name=Battery Life
+Text=BATT
+PositionSticky=1
+ExtentX=-68
+ExtentY=-2
+ExtentOrigin=2
+FixedAlignment=1
+Size=120
+TextColor=CDFF8282
+[Layer48]
+Name=Time
+Text=%Time24%
+PositionSticky=1
+ExtentX=-68
+ExtentY=-2
+ExtentOrigin=8
+Size=80
+TextColor=7FFFFFFF
+RefreshPeriod=1000
+[Layer49]
+Name=BATT
+Text=<G=Charge Level,59,15,1,0,100,18>
+PositionSticky=1
+ExtentX=-95
+ExtentY=-2
+ExtentOrigin=5
+TextColor=7BFF0000,0,20,5A02ED21,50,99,FFFFFFF,99,105,5AE9F900,20,50(Framerate,0)
+RefreshPeriod=1000
+[Layer50]
+Name=RemainingCapacity
+Text=%RemainingCapacity%W
+PositionSticky=1
+ExtentX=-76
+ExtentY=-2
+ExtentOrigin=5
+Size=120
+TextColor=1000000,-99,0.1,FFFFFF,0.1,9999(RemainingCapacity,0)
+RefreshPeriod=1000
+[Layer51]
+Name=Charge Rate
+Text=%Charge Rate%
+PositionSticky=1
+ExtentX=-82
+ExtentY=-2
+ExtentOrigin=5
+Size=120
+TextColor=1000000,-99,1,FFFFFF,1,9999(Charge Rate,0)
+RefreshPeriod=1000
+[Layer52]
+Name=DischargeRate
+Text=-%DischargeRate%
+PositionSticky=1
+ExtentX=-82
+ExtentY=-2
+ExtentOrigin=5
+Size=120
+TextColor=1000000,-99,1,FFFFFF,1,9999(DischargeRate,0)
+RefreshPeriod=1000
+[Layer53]
+Name=BATT
+Text=W
+PositionSticky=1
+ExtentX=-86
+ExtentY=-2
+ExtentOrigin=5
+Size=120
+TextColor=FFFFFF
+[Layer54]
+Name=BATT Estimated Remaining Time
+Text=%BATT Estimated Remaining Time%H
+PositionSticky=1
+ExtentX=-95
+ExtentY=-2
+ExtentOrigin=5
+Size=120
+TextColor=1000000,-9,0.001,7BFF0000,0.002,0.3,FFFF00,0.31,0.5,FFFFFF,0.51,99999(BATT Estimated Remaining Time,0)
+RefreshPeriod=1000
+[Layer55]
+Name=RAM
+Text="RAM%RAM usage percent%% "
+PositionSticky=1
+ExtentX=-119
+ExtentY=-2
+ExtentOrigin=5
+Size=150
+TextColor=1000000,0,97,B4FF0000,97,999(RAM usage percent,0)
+RefreshPeriod=1000

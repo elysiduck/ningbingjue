@@ -1,0 +1,5 @@
+Enable framerate limiter
+Globally controls framerate limiting support. Use this option to enable or disable framerate limiting without changing the profiles. The client applications can also distantly control this option via hotkeys.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

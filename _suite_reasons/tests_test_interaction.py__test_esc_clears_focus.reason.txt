@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_esc_clears_focus
+STATUS=CRASH
+================================== FAILURES ===================================
+____________________________ test_esc_clears_focus ____________________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x00000198B0327B10>
+    def test_esc_clears_focus(qapp):
+        app = Application(ROOT, headless=False).boot()
+        win = app._window
+        ctrl = win._controller
+        ctrl.refresh()
+        if ctrl._items:
+            ctrl.set_focus(0)
+>           assert ctrl._rect.isVisible()
+E           assert False
+E            +  where False = <built-in method isVisible of _FocusRect object at 0x00000198B07F09B0>()
+E            +    where <built-in method isVisible of _FocusRect object at 0x00000198B07F09B0> = <ningbingjue.ui.interaction._FocusRect object at 0x00000198B07F09B0>.isVisible
+E            +      where <ningbingjue.ui.interaction._FocusRect object at 0x00000198B07F09B0> = <ningbingjue.ui.interaction.InteractionController object at 0x00000198B0736490>._rect
+tests\test_interaction.py:248: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 2 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[hotkey] RegisterHotKey 失败: mods=0xa vk=0x77 err=1409
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_esc_clears_focus - assert False
+1 failed in 23.52s

@@ -1,0 +1,5 @@
+Dedicated encoder server type
+Allows selecting between 32-bit or 64-bit dedicated encoder server. 32-bit server is recommended for compatibility when using VFW compression as many VFW codecs are currently 32-bit only. 64-bit server can be useful in conjunction with prerecording because it allows you to use more than 2GB of RAM for prerecord buffer. 
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

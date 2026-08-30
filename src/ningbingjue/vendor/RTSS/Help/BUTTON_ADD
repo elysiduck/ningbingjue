@@ -1,0 +1,5 @@
+Add profile
+Adds new application profile and automatically selects it for editing. You may hold <Ctrl> while pressing this button to create the profiles for currently active 3D applications, or hold <Shift> to create profiles with disabled application detection (i.e. exclusions) for them.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

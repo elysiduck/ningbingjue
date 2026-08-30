@@ -1,0 +1,5 @@
+Peak framerate calculation mode
+Peak minimum and maximum framerate values in benchmark mode can be calculated either from avaraged or from instantaneous framerate values. You may use this option to select perffered calculation mode.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

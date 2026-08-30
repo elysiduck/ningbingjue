@@ -1,0 +1,43 @@
+{
+  "_comment": "HWiNFO 传感器语义映射配置（凝冰结魄 测量增强层）。候选按优先级：先命中先采用。真实名以掌机 tools/dump_hwinfo_sensors.py 输出为准回填；中文名来自掌机 HWiNFO 8.48 中文导出（hwinfo.CSV），英文名为常见 HWiNFO 英文 label 兜底。hwinfo_smi.py 内置 DEFAULT_SENSOR_PATTERNS 与本文件一致，改本文件需同时改默认值或让调用方显式加载本文件。",
+  "enabled": true,
+  "stale_after_s": 30,
+  "sensors": {
+    "gpu_freq": [
+      "GPU 频率 (有效)",
+      "GPU Clock (effective)",
+      "GPU 频率",
+      "GPU Clock"
+    ],
+    "tdp": [
+      "CPU 封装功率",
+      "CPU Package Power",
+      "APU 封装功率",
+      "APU Package Power",
+      "CPU 总功率",
+      "CPU Package"
+    ],
+    "temp_cpu": [
+      "CPU (Tctl/Tdie)",
+      "CPU Package",
+      "CPU Tctl",
+      "CPU 封装",
+      "CPU 温度"
+    ],
+    "temp_gpu": [
+      "GPU 温度",
+      "GPU Temperature",
+      "GPU 核心温度"
+    ],
+    "gpu_util": [
+      "GPU 使用率",
+      "GPU Utilization",
+      "GPU 占用"
+    ],
+    "fps": [
+      "帧率",
+      "Framerate",
+      "FPS"
+    ]
+  }
+}

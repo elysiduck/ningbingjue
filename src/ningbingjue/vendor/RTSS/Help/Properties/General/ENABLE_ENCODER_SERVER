@@ -1,0 +1,5 @@
+Enable dedicated encoder server service
+Enables helper service, which provides dedicated video encoding funtionality to %PRODUCTNAME% videocapture engine. You may safely disable the service if you don't use videocapture features or if you never enable optional dedicated video encoding mode.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

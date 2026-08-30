@@ -1,0 +1,6 @@
+On-Screen Display Y coordinate
+Displays On-Screen Display Y coordinate in reference to the origin. Click this field to enter desired position manually or use the adjacent buttons to increase or decrease it. Use On-Screen Display preview window for visual control of On-Screen Display appearance when adjusting the position.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

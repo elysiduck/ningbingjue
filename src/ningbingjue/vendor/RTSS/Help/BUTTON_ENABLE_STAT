@@ -1,0 +1,9 @@
+Show own statistics
+The primary purpose of %PRODUCTNAME% is collecting framerate statistics for all 3D applications running in the system and providing it to client applications, such as RivaTuner, HIS iTurbo, EVGA Precision or MSI Afterburner. It also provides additional services, such as On-Screen Display, Screen capture support or 3D detection, to the clients.
+However, you can also use %PRODUCTNAME% as a standalone framerate monitoring solution. Enable this option to allow %PRODUCTNAME% to show its own framerate statistics in On-Screen Display without running any additional client applications.
+When client applications are using %PRODUCTNAME% video capture engine, this option is also controlling additional video capture related statistics display. Enable it to display video file time, size and per-frame compression ratio and compression time statistics next to video capture indicator.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.
+

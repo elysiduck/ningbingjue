@@ -1,0 +1,7 @@
+On-Screen Display : vector 2D rendering mode
+On-Screen Display can be rendered using either vector or raster fonts via hardware accelerated 2D or via hardware accelerated 3D DirectX / OpenGL functions. 2D acceleration based implementation provides the maximum compatibility with the most of existing game 3D engines, however it is not supported in DirectX10 and newer games when multisampled antialiasing is enabled. 2D acceleration can also be poorely optimized in some display drivers, so 3D acceleration based implementation can be much more effective in terms of performance hit on such systems. 
+However, 3D implementation has more chances to  be incompatible with some game 3D engines. Try to disable 3D mode if you notice any rendering anomalies in a game while running it with OSD enabled.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.
