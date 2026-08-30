@@ -28,7 +28,7 @@ import logging
 import time
 from typing import Any, Callable, Optional
 
-from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QObject, QPoint, Qt, QTimer, pyqtSignal, QEvent
 from PyQt6.QtGui import QPainter
 from PyQt6.QtWidgets import QFrame, QScrollArea, QWidget
 from PyQt6 import sip
@@ -237,6 +237,9 @@ class InteractionController(QObject):
         self._items: list[NavItem] = []
         self._panel_starts: list[int] = []  # per REAL panel index: first nav-item index, or -1 if that panel has no items
         self._focus: int = -1
+        # 焦点框"待重渲染"标志：由 _schedule_focus_sync() 置位，下一帧统一
+        # 执行一次 _sync_focus_rect()（见该方法的说明）。
+        self._focus_sync_pending: bool = False
         # 2-D matrix navigation (layout editor).  ``_grid_rows[row][col]`` maps
         # to a nav-item index; rebuilt every refresh() from items that carry
         # both (row, col).  Empty for panels that don't use the matrix.
@@ -386,6 +389,19 @@ class InteractionController(QObject):
         # 也只会拿到 0 几何，绝不残留旧页长条黄框。
         self._hide_focus_rect()
         self._rect.setParent(widget)
+        # 在宿主上安装事件过滤器：宿主一发生布局请求 / 尺寸变化 / 重新显示，
+        # 就自动标脏并在下一帧重渲染焦点框（见 eventFilter）。这样任何未来
+        # 新增的功能路径都自动获得"布局变了焦点框就跟"的兜底，无需作者记得
+        # 手动同步 —— 这是彻底终结"越修越多"的关键一环。
+        try:
+            if old is not None and old is not widget:
+                try:
+                    old.removeEventFilter(self)
+                except Exception:
+                    pass
+            widget.installEventFilter(self)
+        except Exception:
+            pass
         # 半透明无边框窗口上 update() 只调度下一次绘制，DWM 已合成的当前帧
         # 仍含旧黄框——对旧宿主 repaint() 擦掉旧父控件上的像素，再对新宿主
         # repaint() 把整块区域立刻重绘，避免「页面已切/编辑器已退出，黄框还在」。
@@ -684,17 +700,13 @@ class InteractionController(QObject):
             if new_focus < 0 and self._items:
                 new_focus = self._grid_rows.get(1, {}).get(0, 0)
             self._focus = new_focus
-            if new_focus >= 0:
-                self._place_rect()
-                if self._gp_active:
-                    self._rect.show()
-            else:
-                self._hide_focus_rect()
+            # 显隐 + 几何统一交给唯一渲染出口（声明式推导，见 _sync_focus_rect）
+            self._sync_focus_rect()
         elif self._card_mode:
             # Card mode: the selected card is highlighted by its border, not a
             # focus rectangle, so there is no single focused button here.
             self._focus = -1
-            self._hide_focus_rect()
+            self._sync_focus_rect()
         else:
             # Item mode: keep focus on a button within the active card.
             rng = ranges.get(self._active_card) if self._active_card >= 0 else None
@@ -707,11 +719,7 @@ class InteractionController(QObject):
             if new_focus < 0 and rng is not None and rng[1] > rng[0]:
                 new_focus = rng[0]
             self._focus = new_focus
-            if self._focus >= 0 and self._gp_active:
-                self._place_rect()
-                self._rect.show()
-            else:
-                self._hide_focus_rect()
+            self._sync_focus_rect()
 
         # ---- COLD-START SAFETY NET ----
         # If the user has never interacted via gamepad/keyboard, force
@@ -729,29 +737,16 @@ class InteractionController(QObject):
                     except Exception:
                         pass
 
-        # ---- 最终合法性兜底（根治残留）----
-        # 无论上面哪条分支、谁写的代码，只要焦点指向的项已经不合法，就强制
-        # 归零清理，绝不保留任何旧几何（旧几何是「退出编辑器/切页后长条黄框
-        # 残留」的唯一来源）。这一步让"任何改动"都不可能再让焦点框残留——
-        # 因为它只在 self._current() 真实有效时才可能可见。
-        cur = self._current()
-        if cur is not None:
-            w = cur.widget
-            # 控件必须真实存活、可见，且属于当前宿主坐标系（祖先链含 _host）。
-            # 退出编辑器后若仍指向旧 overlay 的控件，mapTo 会算出错位长条，
-            # 这里直接判死并清理。
-            belongs = False
-            p: Optional[QWidget] = w
-            while p is not None:
-                if p is self._host:
-                    belongs = True
-                    break
-                p = p.parentWidget()
-            if (not _widget_alive(w) or not w.isVisible() or not belongs):
-                self._hide_focus_rect()
-        else:
-            # 索引越界 / 解析失败 → 必清（含几何归零）。
-            self._hide_focus_rect()
+        # ---- 最终渲染（唯一出口）----
+        # 上面的分支只负责**算出焦点索引**，显隐与几何全部由 _sync_focus_rect()
+        # 这一个出口根据当前真实状态推导：索引有效 + 控件存活 + 可见 + 属于
+        # 当前宿主 + 用户确实用键盘/手柄 才显示，否则一律归零清理。
+        #
+        # 这取代了原先写在这里的手写兜底逻辑（那段代码与 _sync_focus_rect 完全
+        # 等价，保留只会造成"两处真相源"）。同时因为宿主上装有事件过滤器
+        # （set_host -> installEventFilter），任何布局变化都会在下一帧自动触发
+        # 这里重渲染 —— 新增功能路径无需记得手动同步，也不可能残留。
+        self._sync_focus_rect()
 
     # -- focus helpers ----------------------------------------------------
     def _current(self) -> Optional[NavItem]:
@@ -794,9 +789,10 @@ class InteractionController(QObject):
     def set_focus(self, index: int, force_rect: bool = False) -> None:
         self._reset_slider()
         if index == self._focus:
-            self._place_rect(keep_visible=True)
-            if force_rect:
-                self._rect.show()
+            # 焦点未变：只需按最新几何重摆。仍走唯一渲染出口 —— _place_rect
+            # 已不再负责 show()，若这里直接调它，手柄用户点击已聚焦项时焦点
+            # 框会不显示（回归）。force 传给出口以便鼠标点击也能强制点亮。
+            self._sync_focus_rect(keep_visible=True, force=force_rect)
             return
         old = self._current()
         old_panel = self._panel_index_of(self._focus)
@@ -835,12 +831,10 @@ class InteractionController(QObject):
                 self._edit_overlay._set_sel(None)
             except Exception:
                 pass
-        self._place_rect(keep_visible=True)
-        # Only show the focus rectangle after the user has actually interacted
-        # via gamepad or keyboard navigation (cold start = no visible cursor).
-        # ``force_rect``（鼠标点击选中行）也强制显示，使纯鼠标用户也能看到光标。
-        if self._gp_active or force_rect:
-            self._rect.show()
+        # 显隐 + 几何统一交给唯一渲染出口 _sync_focus_rect()。
+        # ``force=force_rect``：鼠标点击选中行也强制显示，使纯鼠标用户能看到
+        # 光标；手柄/键盘用户则由 _gp_active 决定（冷启动不显示光标）。
+        self._sync_focus_rect(keep_visible=True, force=force_rect)
 
     def _place_rect(self, keep_visible: bool = False) -> None:
         """Reposition the focus rectangle onto the current control.
@@ -908,8 +902,10 @@ class InteractionController(QObject):
                 widget_shows = getattr(cur.widget, "show_gamepad_hint", False)
                 self._rect.set_hint(cur.hint if (cur.hint and not widget_shows) else "")
             self._rect.raise_()  # ensure focus rect is painted ON TOP of sibling widgets
-            if self._gp_active:
-                self._rect.show()
+            # 注意：这里**不再** show()。显隐一律由唯一渲染出口
+            # _sync_focus_rect() 决定；_place_rect 只负责算几何与提示徽章。
+            # 这样滚动重摆（_reposition_on_scroll）不会把一个本该隐藏的框
+            # 又点亮，也不会让"是否可见"散落在多个方法里。
         except Exception:
             # ``cur.widget`` can be a QWidget that the per-second refresh() has
             # already deleteLater()'d (e.g. a tile button rebuilt between the
@@ -924,12 +920,104 @@ class InteractionController(QObject):
     def set_rect_visible(self, visible: bool) -> None:
         """Show / hide the focus rectangle (e.g. hide it while a modal
         layout-editor dialog is open so it never paints over the dialog)."""
-        if visible and self._gp_active:
-            if self._focus >= 0:
-                self._place_rect()
-                self._rect.show()
+        if visible:
+            self._sync_focus_rect()
         else:
             self._hide_focus_rect()
+
+    def _sync_focus_rect(self, keep_visible: bool = False,
+                         force: bool = False) -> None:
+        """焦点框的**唯一渲染出口**（声明式）。
+
+        焦点框"该不该显示、显示在哪"完全由**当前真实状态推导**，而不是由调用
+        方命令式地 show / hide：
+
+            可见 = (手柄/键盘已激活 或 鼠标强制 force)
+                  且 焦点索引有效
+                  且 控件存活、可见、且属于当前宿主坐标系
+
+        任何一条不满足 → 一律归零清理（隐藏 + 几何 0 + 清 hint）。因此
+        **"残留"在架构上不可能存在**：新增任何功能路径（翻页、动画、滚动、
+        新编辑器）都**不需要记得手动清理焦点框** —— 即便它什么都不做，
+        下一帧也会被 _schedule_focus_sync 的自动钩子纠正（见下）。
+
+        ============================ 约定 ============================
+        除本函数与 _place_rect 内部以外，任何地方都不得直接操作
+        self._rect 的 show()/hide()。要改变焦点框，就调用本函数。
+        =============================================================
+        """
+        try:
+            if not (self._gp_active or force) or self._host is None:
+                self._hide_focus_rect()
+                return
+            if self._focus < 0:
+                self._hide_focus_rect()
+                return
+            cur = self._current()
+            if cur is None:
+                self._hide_focus_rect()
+                return
+            w = cur.widget
+            if not _widget_alive(w) or not w.isVisible():
+                self._hide_focus_rect()
+                return
+            # 宿主归属：控件必须属于当前宿主坐标系（祖先链含 self._host），
+            # 否则 mapTo 会算出错位几何（退出编辑器后指向旧 overlay 控件时）。
+            belongs = False
+            p: Optional[QWidget] = w
+            while p is not None:
+                if p is self._host:
+                    belongs = True
+                    break
+                p = p.parentWidget()
+            if not belongs:
+                self._hide_focus_rect()
+                return
+            self._place_rect(keep_visible=keep_visible)
+            self._rect.show()
+        except Exception:
+            self._hide_focus_rect()
+
+    def _schedule_focus_sync(self) -> None:
+        """标记焦点框需要重新渲染，并在**下一帧**统一执行一次。
+
+        这是"漏不掉"的关键兜底：任何会改变布局 / 导航 / 焦点的路径都可以
+        （也应当）只调这里标脏，而不必关心焦点框该怎么画。即便某条新路径
+        完全忘了调用，宿主上的事件过滤器（见 eventFilter）也会捕获布局变化
+        并自动标脏，从而让焦点框在下一帧自我纠正。
+        """
+        if getattr(self, "_focus_sync_pending", False):
+            return
+        self._focus_sync_pending = True
+        try:
+            QTimer.singleShot(0, self._run_pending_focus_sync)
+        except Exception:
+            self._focus_sync_pending = False
+            self._sync_focus_rect()
+
+    def _run_pending_focus_sync(self) -> None:
+        if not getattr(self, "_focus_sync_pending", False):
+            return
+        self._focus_sync_pending = False
+        self._sync_focus_rect()
+
+    def eventFilter(self, obj, event):  # noqa: N802 - Qt camelCase
+        """监听宿主的布局变化，让焦点框自动自愈。
+
+        宿主（主滚动区 / 编辑层）一旦发生布局请求、尺寸变化或重新显示，
+        里面所有控件的几何都可能变（甚至被销毁重建）。这里捕获这些事件并
+        标脏，使焦点框在下一帧按最新几何重新渲染 —— 任何未来新增的功能
+        路径都自动获得这个兜底，无需作者记得手动同步焦点框。
+        """
+        try:
+            if obj is self._host:
+                et = event.type()
+                if et in (QEvent.Type.LayoutRequest, QEvent.Type.Resize,
+                          QEvent.Type.Show, QEvent.Type.ShowToParent):
+                    self._schedule_focus_sync()
+        except Exception:
+            pass
+        return False
 
     def _connect_scroll_tracking(self, widget: QWidget) -> None:
         """Connect every QScrollArea that contains ``widget`` to the focus-rect
@@ -975,10 +1063,13 @@ class InteractionController(QObject):
         Passes ``keep_visible=False`` so scrolling the viewport never fights the
         user by yanking the page back to the focused control's height.
         """
-        if not self._rect.isVisible() or self._focus < 0:
+        if self._focus < 0:
             return
         try:
-            self._place_rect(keep_visible=False)
+            # 走唯一渲染出口而非 _place_rect：已可见时跟随滚动更新几何；若焦点框
+            # 因故处于隐藏状态，只要条件重新满足（控件回到可视状态、用户仍用
+            # 手柄/键盘），滚动就会把它重新点亮 —— 自愈，无需等 1 秒的 refresh。
+            self._sync_focus_rect(keep_visible=False)
         except Exception:
             pass
 
