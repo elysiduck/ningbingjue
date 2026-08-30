@@ -2270,6 +2270,14 @@ class _OverlayWindow(QWidget):
                 self._rebuild_card_bg_cache(tw, th)
             if self._card_bg_pixmap is not None and not self._card_bg_pixmap.isNull():
                 p.drawPixmap(tp.x(), tp.y(), self._card_bg_pixmap)
+                # 2026-08-30 修复：图片蒙版色（40% 不透明）叠加 —— 与蒙版页
+                # 预览保持一致。旧实现画完图直接 return，「图片蒙版色」色板
+                # 在 image 模式下没有任何效果，亮图上卡片文字看不清。
+                mc = QColor(self._card_bg_color)
+                mc.setAlpha(102)
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(mc)
+                p.drawRoundedRect(tp.x(), tp.y(), tw, th, 14, 14)
                 return
         # solid base (or image unavailable)
         p.setPen(Qt.PenStyle.NoPen)
@@ -4536,9 +4544,16 @@ class _OverlayWindow(QWidget):
             try:
                 _ctrl.set_rebuilding(True)
                 # 切页瞬间立即隐藏焦点框，不等 singleShot(0) 重建（消除旧页残留一帧）。
-                # rebind() 仍会在重建时做最终复位（卡片模式 + 清空索引 + 隐藏），
                 # 此处只是把「从按下翻页到重建执行之间」那一个事件循环窗口的黄框可见性提前掐断。
                 _ctrl._rect.hide()
+                # 主 HUD 切页由随后的 rebind() 做这套复位；但按钮编辑器全页模式走
+                # sync_all 不调 rebind()，故这里把同样的复位补一遍，保证两条路径一致：
+                # 切页强制回卡片模式 + 清空陈旧活跃卡片索引，避免 refresh() 用旧页
+                # _active_card 把焦点框复活到新页错误卡片（与最初 HUD 越界 bug 同源）。
+                _ctrl._card_mode = True
+                _ctrl._active_card = -1
+                _ctrl._card_focus = -1
+                _ctrl._apply_card_highlight()
             except Exception:
                 pass
         self._page_rebuild_pending = True

@@ -5734,7 +5734,8 @@ class BreathingEditPanel(QWidget):
     黑罩淡出）整合为「基础」+「波形与节奏」两张分组卡片，避免逐项一张
     卡片的松散布局。顶部固定 :class:`_BreathHeadPreview` 整合预览（模拟
     HUD 窗口 + 焦点瞬态波形 + 常态呼吸波形 + 演示按钮），位于 QScrollArea
-    **之前**，永远不随内容滚动。卡片区背景（tray）编辑保留在本页。
+    **之前**，永远不随内容滚动。卡片区背景（tray）编辑已移到蒙版页
+    ThemeMaskPanel（唯一入口），本页只管呼吸灯本身。
     """
 
     # 12 色色板（与演示 html 一致；含暖白/钢灰两档低饱和色）。
@@ -5766,12 +5767,7 @@ class BreathingEditPanel(QWidget):
         self._flash_ms = 180          # 获得焦点冲到峰值时长
         self._hold_ms = 120           # 峰值停留时长
         self._scrim_ms = 200          # 失焦黑罩淡出时长
-        # -- card tray background (customizable) -----------------------
-        self._tray_color_hex = "0e1117"
-        self._tray_opacity = 86
-        self._tray_border = True
-        self._tray_blur = 18
-        self._tray_swatches: list[QFrame] = []
+        # 卡片区背景（tray）编辑已移到蒙版页 ThemeMaskPanel，本页不再持有。
 
         root = QVBoxLayout(self)
         root.setContentsMargins(8, 8, 8, 8)
@@ -5923,91 +5919,6 @@ class BreathingEditPanel(QWidget):
             0, 800, 200, "200 ms", self._on_scrim)
         content_layout.addWidget(wave)
 
-        # ---- card tray background (customizable) ---------------------
-        tcard = _EditCard("卡片区背景", self)
-        tcf = tcard.content()
-        tpv = _TrayPreview(self)
-        tcf.addWidget(tpv)
-        self._tray_preview = tpv
-        tray_sw_wrap = QWidget()
-        self._tray_sw_row = FlowLayout(tray_sw_wrap, margin=0, spacing=4)
-        for label, rgb in self._PRESETS:
-            sw = QFrame(tray_sw_wrap)
-            sw.setFixedSize(26, 20)
-            sw._hex = self._rgb_to_hex(rgb)
-            sw._label = label
-            sw.setStyleSheet(self._sw_style_tray(False, sw._hex))
-            sw.setCursor(Qt.CursorShape.PointingHandCursor)
-            sw.setToolTip(label)
-            sw.mousePressEvent = lambda _e, hx=sw._hex: self._pick_tray_color(hx)  # type: ignore[assignment]
-            self._tray_sw_row.addWidget(sw)
-            self._tray_swatches.append(sw)
-        self._tray_custom_btn = QPushButton("自定义颜色…")
-        self._tray_custom_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.08); color: #dfe6f0;"
-            " border: none; border-radius: 6px;"
-            " padding: 4px 8px; font-size: 10px; }")
-        self._tray_custom_btn.clicked.connect(self._pick_tray_custom)
-        self._tray_sw_row.addWidget(self._tray_custom_btn)
-        tcf.addWidget(tray_sw_wrap)
-        orow = QHBoxLayout()
-        self._tray_opacity_slider = _NoWheelSlider(Qt.Orientation.Horizontal)
-        self._tray_opacity_slider.setRange(0, 100)
-        self._tray_opacity_slider.setValue(86)
-        self._tray_opacity_slider.setStyleSheet(
-            "QSlider { border: none; background: transparent; }"
-            "QSlider::groove:horizontal { border: none; height: 6px;"
-            " background: rgba(255,255,255,0.12); border-radius: 3px; }"
-            "QSlider::handle:horizontal { border: none; background: #7fd1ff;"
-            " width: 12px; height: 12px; margin: -3px 0; border-radius: 6px; }"
-            "QSlider::sub-page:horizontal { background: #7fd1ff; border-radius: 3px; }")
-        self._tray_opacity_val = QLabel("86%")
-        self._tray_opacity_val.setStyleSheet("color: #dfe6f0; font-size: 11px;")
-        self._tray_opacity_val.setFixedWidth(46)
-        self._tray_opacity_val.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._tray_opacity_slider.valueChanged.connect(self._on_tray_opacity)
-        orow.addWidget(self._tray_opacity_slider, 1)
-        orow.addWidget(self._tray_opacity_val)
-        tcf.addLayout(orow)
-        brow = QHBoxLayout()
-        self._tray_blur_slider = _NoWheelSlider(Qt.Orientation.Horizontal)
-        self._tray_blur_slider.setRange(0, 50)
-        self._tray_blur_slider.setValue(18)
-        self._tray_blur_slider.setStyleSheet(
-            "QSlider { border: none; background: transparent; }"
-            "QSlider::groove:horizontal { border: none; height: 6px;"
-            " background: rgba(255,255,255,0.12); border-radius: 3px; }"
-            "QSlider::handle:horizontal { border: none; background: #7fd1ff;"
-            " width: 12px; height: 12px; margin: -3px 0; border-radius: 6px; }"
-            "QSlider::sub-page:horizontal { background: #7fd1ff; border-radius: 3px; }")
-        self._tray_blur_val = QLabel("18px")
-        self._tray_blur_val.setStyleSheet("color: #dfe6f0; font-size: 11px;")
-        self._tray_blur_val.setFixedWidth(46)
-        self._tray_blur_val.setAlignment(
-            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._tray_blur_slider.valueChanged.connect(self._on_tray_blur)
-        brow.addWidget(self._tray_blur_slider, 1)
-        brow.addWidget(self._tray_blur_val)
-        tcf.addLayout(brow)
-        trow2 = QHBoxLayout()
-        _desc_op = QLabel("背景透明度（0% = 完全透明）")
-        _desc_op.setWordWrap(True)
-        _desc_op.setStyleSheet("color: #aeb9c9; font-size: 10px;")
-        trow2.addWidget(_desc_op, 1)
-        self._tray_border_btn = QPushButton("边框：开")
-        self._tray_border_btn.setCheckable(True)
-        self._tray_border_btn.setChecked(True)
-        self._tray_border_btn.setStyleSheet(
-            "QPushButton { background: rgba(255,255,255,0.08); color: #dfe6f0;"
-            " border: none; border-radius: 6px;"
-            " padding: 5px 10px; font-size: 11px; }"
-            "QPushButton:checked { background: rgba(127,209,255,0.28);"
-            " color: #bfe8ff; border: none; }")
-        self._tray_border_btn.clicked.connect(self._toggle_tray_border)
-        trow2.addWidget(self._tray_border_btn)
-        tcf.addLayout(trow2)
-        content_layout.addWidget(tcard)
 
         # ---- footer ----------------------------------------------------
         foot = QHBoxLayout()
@@ -6048,10 +5959,6 @@ class BreathingEditPanel(QWidget):
         return (f"QFrame {{ background-color: #{hex_color}; border: none;"
                 f" border-radius: 5px; }}")
 
-    def _sw_style_tray(self, selected: bool, hex_color: str) -> str:
-        return (f"QFrame {{ background-color: #{hex_color}; border: none;"
-                f" border-radius: 5px; }}")
-
     def _accent_fallback(self) -> QColor:
         win = getattr(self._app, "_window", None)
         acc = getattr(win, "_accent", None)
@@ -6072,7 +5979,7 @@ class BreathingEditPanel(QWidget):
         self._preview.set_color(col)
 
     def _push_live(self) -> None:
-        """保存前实时把当前呼吸灯/tray 设置推给真实 HUD（仅预览，不落盘）。"""
+        """保存前实时把当前呼吸灯设置推给真实 HUD（仅预览，不落盘）。"""
         try:
             win = getattr(self._app, "_window", None)
             if win is not None:
@@ -6081,8 +5988,6 @@ class BreathingEditPanel(QWidget):
                                  flash_ms=self._flash_ms,
                                  hold_ms=self._hold_ms,
                                  scrim_ms=self._scrim_ms)
-                win.apply_tray(self._tray_color_hex, self._tray_opacity,
-                               self._tray_border, self._tray_blur)
             self._overlay._apply_window_border()
         except Exception:
             pass
@@ -6206,54 +6111,6 @@ class BreathingEditPanel(QWidget):
             self._apply_preview_color()
             self._push_live()
 
-    # -- card tray handlers --------------------------------------------
-    def _on_tray_opacity(self, val: int) -> None:
-        self._tray_opacity = val
-        self._tray_opacity_val.setText(f"{val}%")
-        self._apply_tray_preview()
-
-    def _on_tray_blur(self, val: int) -> None:
-        self._tray_blur = max(0, min(50, int(val)))
-        self._tray_blur_val.setText(f"{self._tray_blur}px")
-        self._apply_tray_preview()
-
-    def _pick_tray_color(self, hexv: str) -> None:
-        self._tray_color_hex = hexv
-        self._highlight_tray(hexv)
-        self._apply_tray_preview()
-
-    def _pick_tray_custom(self) -> None:
-        dlg = QColorDialog()
-        if self._tray_color_hex:
-            try:
-                dlg.setCurrentColor(QColor("#" + self._tray_color_hex))
-            except Exception:
-                pass
-        if dlg.exec() == QColorDialog.DialogCode.Accepted:
-            c = dlg.currentColor()
-            hexv = f"{c.red():02x}{c.green():02x}{c.blue():02x}"
-            self._tray_color_hex = hexv
-            self._highlight_tray(hexv)
-            self._apply_tray_preview()
-
-    def _toggle_tray_border(self) -> None:
-        self._tray_border = self._tray_border_btn.isChecked()
-        self._tray_border_btn.setText("边框：" + ("开" if self._tray_border else "关"))
-        self._apply_tray_preview()
-
-    def _highlight_tray(self, hexv: str) -> None:
-        for sw in self._tray_swatches:
-            sel = (getattr(sw, "_hex", "") == hexv)
-            sw.setStyleSheet(self._sw_style_tray(sel, sw._hex))
-
-    def _apply_tray_preview(self) -> None:
-        try:
-            c = (QColor("#" + self._tray_color_hex)
-                 if self._tray_color_hex else QColor(14, 17, 23))
-        except Exception:
-            c = QColor(14, 17, 23)
-        self._tray_preview.set_params(
-            c, self._tray_opacity, self._tray_border, self._tray_blur)
 
     # -- load / commit -------------------------------------------------
     def refresh(self) -> None:
@@ -6316,27 +6173,8 @@ class BreathingEditPanel(QWidget):
         # live preview（颜色 + 6 个波形参数一次推齐）
         self._apply_preview_color()
         self._sync_sim()
-        # card tray background
-        tray_color = getattr(cfg, "tray_color", "0e1117") or "0e1117"
-        tray_opacity = int(getattr(cfg, "tray_opacity", 86) or 86)
-        tray_border = bool(getattr(cfg, "tray_border", True))
-        tray_blur = int(getattr(cfg, "tray_blur", 18) or 18)
-        self._tray_color_hex = tray_color
-        self._tray_opacity = tray_opacity
-        self._tray_border = tray_border
-        self._tray_blur = tray_blur
-        self._tray_opacity_slider.blockSignals(True)
-        self._tray_opacity_slider.setValue(max(0, min(100, int(tray_opacity))))
-        self._tray_opacity_slider.blockSignals(False)
-        self._tray_opacity_val.setText(f"{int(tray_opacity)}%")
-        self._tray_blur_slider.blockSignals(True)
-        self._tray_blur_slider.setValue(max(0, min(50, int(tray_blur))))
-        self._tray_blur_slider.blockSignals(False)
-        self._tray_blur_val.setText(f"{int(tray_blur)}px")
-        self._tray_border_btn.setChecked(tray_border)
-        self._tray_border_btn.setText("边框：" + ("开" if tray_border else "关"))
-        self._highlight_tray(tray_color)
-        self._apply_tray_preview()
+        # 卡片区背景（tray）编辑已统一移到蒙版页 ThemeMaskPanel，
+        # 本页不再读写 tray_*，避免两处互相覆盖。
         self._status.setText("")
 
     def _save(self) -> None:
@@ -6349,10 +6187,7 @@ class BreathingEditPanel(QWidget):
         cfg.breath_flash_ms = self._flash_ms
         cfg.breath_hold_ms = self._hold_ms
         cfg.breath_scrim_ms = self._scrim_ms
-        cfg.tray_color = self._tray_color_hex
-        cfg.tray_opacity = int(self._tray_opacity)
-        cfg.tray_border = bool(self._tray_border)
-        cfg.tray_blur = int(self._tray_blur)
+        # tray_* 不在本页保存（唯一入口 = 蒙版页底板卡）
         try:
             self._app.save_all()
         except Exception:
@@ -6366,8 +6201,6 @@ class BreathingEditPanel(QWidget):
                                  hold_ms=self._hold_ms,
                                  scrim_ms=self._scrim_ms)
                 win.set_breath_enabled(self._enabled)
-                win.apply_tray(self._tray_color_hex, self._tray_opacity,
-                               self._tray_border, self._tray_blur)
             self._overlay._apply_window_border()
         except Exception:
             pass
@@ -6397,11 +6230,7 @@ class BreathingEditPanel(QWidget):
                                  hold_ms=int(getattr(cfg, "breath_hold_ms", 120) or 120),
                                  scrim_ms=int(getattr(cfg, "breath_scrim_ms", 200) or 200))
                 win.set_breath_enabled(bool(getattr(cfg, "breath_enabled", True)))
-                tray_color = getattr(cfg, "tray_color", "0e1117") or "0e1117"
-                tray_opacity = int(getattr(cfg, "tray_opacity", 86) or 86)
-                tray_border = bool(getattr(cfg, "tray_border", True))
-                tray_blur = int(getattr(cfg, "tray_blur", 18) or 18)
-                win.apply_tray(tray_color, tray_opacity, tray_border, tray_blur)
+                # tray_* 恢复交由蒙版页负责，本页不再处理
             self._overlay._apply_window_border()
         except Exception:
             pass
@@ -6448,19 +6277,7 @@ class BreathingEditPanel(QWidget):
         items.append(NavItem(self._scrim_slider, "slider",
                              nudge=lambda d, sl=self._scrim_slider: (
                                  sl.setValue(max(0, min(800, sl.value() + d))), True)[1]))
-        for sw in self._tray_swatches:
-            items.append(NavItem(sw, "action",
-                                 confirm=lambda hx=sw._hex: self._pick_tray_color(hx)))
-        items.append(NavItem(self._tray_custom_btn, "action",
-                             confirm=self._pick_tray_custom, hint="A"))
-        items.append(NavItem(self._tray_opacity_slider, "slider",
-                             nudge=lambda d, sl=self._tray_opacity_slider: (
-                                 sl.setValue(max(0, min(100, sl.value() + d))), True)[1]))
-        items.append(NavItem(self._tray_blur_slider, "slider",
-                             nudge=lambda d, sl=self._tray_blur_slider: (
-                                 sl.setValue(max(0, min(50, sl.value() + d))), True)[1]))
-        items.append(NavItem(self._tray_border_btn, "toggle",
-                             confirm=self._toggle_tray_border, hint="A"))
+        # 卡片区背景（tray）导航项已随卡片一起移除（唯一入口 = 蒙版页）。
         items.append(NavItem(self._save_btn, "action",
                              confirm=self._save, hint="Y"))
         items.append(NavItem(self._cancel_btn, "action",
@@ -6886,12 +6703,15 @@ class _MaskPreviewCanvas(QWidget):
             cy0 = iy + tb_h + dv_h + 4
             bb_y = win.y() + win.height() - bb_h - 2
             self._editor_bottom(p, QRect(ix, bb_y, iw, bb_h), accent)
+            # 2026-08-30 修复遮挡：tray 底边让出底部按钮栏（旧值 win 底-8，
+            # tray/卡片比按钮栏多伸约 24px，最后几张卡直接叠在按钮上）。
+            avail_b = bb_y - 4
         else:
             tb_h = 16
             self._main_top(p, QRect(ix, iy, iw, tb_h), accent)
             cy0 = iy + tb_h + 4
             bb_h = 0
-        avail_b = win.y() + win.height() - 8
+            avail_b = win.y() + win.height() - 8
         tray = QRect(int(ix + 6), int(cy0 - 3), int(iw - 12),
                    int((avail_b - (cy0 - 3)) - 6))
         self._draw_tray(p, tray, o, b, R_T)
@@ -7014,11 +6834,34 @@ class _MaskPreviewCanvas(QWidget):
         if getattr(b, "_card_bg_enabled", False):
             pm = o.bg_pixmap()
             if str(getattr(b, "_card_bg_mode", "solid")) == "image"                     and pm is not None and not pm.isNull():
-                sc = pm.scaled(tray.width(), tray.height(),
-                               Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                               Qt.TransformationMode.SmoothTransformation)
+                # 2026-08-30 修复①③⑥：
+                # ③ 溢出 —— 图先裁进 tray 圆角再画（KeepAspectRatioByExpanding
+                #    的图比 tray 大，旧实现没有 clip，铺到圆角外）；
+                #    蒙版 —— 画完图后把「图片蒙版色」按 40% 叠上去（旧实现蒙版色
+                #    只在 solid 分支用到，image 分支等于没有蒙版）；
+                # ⑥ 性能 —— scaled(Smooth) 每帧执行，4K 图 50-200ms/帧；改为按
+                #    (路径, 宽, 高) 缓存，只有变化时重缩放一次，每帧只贴图。
+                key = (str(getattr(b, "_card_bg_image", "") or ""),
+                       tray.width(), tray.height())
+                if getattr(self, "_pv_scaled_key", None) != key:
+                    self._pv_scaled = pm.scaled(
+                        tray.width(), tray.height(),
+                        Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                        Qt.TransformationMode.SmoothTransformation)
+                    self._pv_scaled_key = key
+                sc = self._pv_scaled
+                p.save()
+                clip = QPainterPath()
+                clip.addRoundedRect(QRectF(tray), R_T, R_T)
+                p.setClipPath(clip)
                 p.drawPixmap(tray.x() + (tray.width() - sc.width()) // 2,
                              tray.y() + (tray.height() - sc.height()) // 2, sc)
+                # 图片蒙版色（40% 不透明度），把亮图压暗保证卡片文字可读
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(_hex_qcol(getattr(b, "_card_bg_color_hex", ""),
+                                     102))
+                p.drawRoundedRect(QRectF(tray), R_T, R_T)
+                p.restore()
             else:
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(_hex_qcol(getattr(b, "_card_bg_color_hex", ""), 255))
@@ -7574,10 +7417,13 @@ class ThemeMaskPanel(QWidget):
         ex.setSpacing(6)
         img_row = QHBoxLayout()
         img_row.setSpacing(6)
-        img_lbl = QLabel(self._card_bg_image if self._card_bg_image
-                         else "（未选择图片）")
+        img_lbl = QLabel("")
         img_lbl.setStyleSheet("color: #aeb9c9; font-size: 10px;")
+        # 锁宽：长路径曾把整个滚动内容区撑宽（页面变长/横向滚动条）。
+        # 中段省略显示，完整路径放 tooltip。
+        img_lbl.setFixedWidth(210)
         self._card_bg_image_lbl = img_lbl
+        self._set_card_bg_path_label(self._card_bg_image)
         img_row.addWidget(img_lbl, 1)
         img_btn = QPushButton("选择图片...")
         img_btn.setStyleSheet(_tm_btn_style())
@@ -7665,17 +7511,30 @@ class ThemeMaskPanel(QWidget):
         self._card_bg_color_hex = str(hexv or "")
         self._push_card_bg()
 
+    def _set_card_bg_path_label(self, path: str) -> None:
+        """路径标签锁宽显示：中段省略，完整路径放 tooltip。
+
+        修复：长路径曾把整个滚动内容区撑宽（页面变长 + 横向滚动条）。
+        """
+        lbl = getattr(self, "_card_bg_image_lbl", None)
+        if lbl is None:
+            return
+        full = path or "（未选择图片）"
+        fm = lbl.fontMetrics()
+        lbl.setText(fm.elidedText(full, Qt.TextElideMode.ElideMiddle, 200))
+        lbl.setToolTip(full)
+
     def _pick_card_bg_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "选择卡片区背景图片", "", "图片 (*.png *.jpg *.jpeg *.bmp)")
         if path:
             self._card_bg_image = path
-            self._card_bg_image_lbl.setText(path)
+            self._set_card_bg_path_label(path)
             self._push_card_bg()
 
     def _clear_card_bg_image(self) -> None:
         self._card_bg_image = ""
-        self._card_bg_image_lbl.setText("（未选择图片）")
+        self._set_card_bg_path_label("")
         self._push_card_bg()
 
     def _push_card_bg(self) -> None:
@@ -7868,7 +7727,7 @@ class ThemeMaskPanel(QWidget):
             else f"{self._tray_border_width}px")
         self._margin_val.setText(f"{self._margin} px")
         self._card_bg_enabled_btn.setChecked(self._card_bg_enabled)
-        self._card_bg_image_lbl.setText(self._card_bg_image or "（未选择图片）")
+        self._set_card_bg_path_label(self._card_bg_image)
         self._card_bg_color_row.set_current(self._card_bg_color_hex)
         self._sync_card_bg_controls()
         self._card_fill_color_row.set_current(self._card_fill_hex)
