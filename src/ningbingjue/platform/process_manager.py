@@ -364,6 +364,15 @@ class ProcessManager(ExternalAdapter, abc.ABC):
         """跨会话判定进程是否在跑（默认实现：退回 ``is_running`` 的语义）。"""
         return False
 
+    def is_suspended_native(self, pid: int) -> bool | None:
+        """问内核这个进程**现在**是否真的被挂起（与内存账本无关）。
+
+        True / False；查询不了返回 ``None``（未知）——调用方必须把「未知」
+        当保守情况处理，绝不当「未挂起」。基类默认全部返回 ``None``，
+        由 Win32 实现（NtQuerySystemInformation）与 Mock（内存集合）覆写。
+        """
+        return None
+
 
 class Win32ProcessManager(ProcessManager):
     """ctypes-backed ``NtSuspendProcess`` / ``NtResumeProcess`` + wmic enum.
@@ -690,16 +699,26 @@ class Win32ProcessManager(ProcessManager):
             h = self._handle(pid)
             if not h:
                 return False
-            # 先最小化，再挂起。被挂起的进程其窗口线程无法处理 SC_MINIMIZE
-            # 消息，若先 NtSuspendProcess 再最小化，最小化等于空操作 —— 窗口
-            # 会以「还原态」停留在（很可能已被移走的）后台虚拟桌面上，而不是
-            # 最小化。掌机实测即「进程已移到其他虚拟桌面，但没有最小化」。
-            self._set_window_state(pid, True)
-            ret = self._ntdll.NtSuspendProcess(h)
-            self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
-            if ret == 0:
-                self._suspended.add(pid)
-                return True
+            try:
+                # 幂等（计数器防护）：NtSuspendProcess 与 SuspendThread 一样是
+                # 计数器语义 —— 对已挂起的进程再挂一次，之后一次
+                # NtResumeProcess 解不开（休眠恢复后用户重新点冻结就是这个
+                # 现场：「窗口拉回来了但依旧冻结」）。内核说已经挂着，就绝不再
+                # 叠加。查询失败(None)时按原行为真挂，保持可用性。
+                if self.is_suspended_native(pid) is True:
+                    self._suspended.add(pid)
+                    return True
+                # 先最小化，再挂起。被挂起的进程其窗口线程无法处理 SC_MINIMIZE
+                # 消息，若先 NtSuspendProcess 再最小化，最小化等于空操作 —— 窗口
+                # 会以「还原态」停留在（很可能已被移走的）后台虚拟桌面上，而不是
+                # 最小化。掌机实测即「进程已移到其他虚拟桌面，但没有最小化」。
+                self._set_window_state(pid, True)
+                ret = self._ntdll.NtSuspendProcess(h)
+                if ret == 0:
+                    self._suspended.add(pid)
+                    return True
+            finally:
+                self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
         except Exception:
             pass
         return False
@@ -724,13 +743,23 @@ class Win32ProcessManager(ProcessManager):
             h = self._handle(pid)
             if not h:
                 return False
-            ret = self._ntdll.NtResumeProcess(h)
-            self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
-            if ret == 0:
-                self._suspended.discard(pid)
-                if restore_window:
-                    self._set_window_state(pid, False)
-                return True
+            try:
+                # 幂等（计数器防护）：内核说它根本没挂起，就不空转
+                # NtResumeProcess —— 空转本身无害，但把「没挂」当「已恢复」
+                # 会掩盖账本脱节；这里直接按已恢复处理并同步账本。
+                if self.is_suspended_native(pid) is False:
+                    self._suspended.discard(pid)
+                    if restore_window:
+                        self._set_window_state(pid, False)
+                    return True
+                ret = self._ntdll.NtResumeProcess(h)
+                if ret == 0:
+                    self._suspended.discard(pid)
+                    if restore_window:
+                        self._set_window_state(pid, False)
+                    return True
+            finally:
+                self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
         except Exception:
             pass
         return False
@@ -752,6 +781,89 @@ class Win32ProcessManager(ProcessManager):
 
     def is_suspended(self, pid: int) -> bool:
         return pid in self._suspended
+
+    # -- 内核级真实挂起态（NtQuerySystemInformation） ----------------------
+    # ``_suspended`` 是本进程的内存账本：App 重启后清零、休眠恢复后可能滞后，
+    # 而 NtSuspendProcess 是**计数器语义**（同一线程可叠加多次挂起），账本与
+    # 内核真值一旦脱节，就会出现「记录说不挂、其实挂着」「resume 一次解不开
+    # 双重挂起」。这里直接问内核：该 pid 的所有线程是否都处于
+    # ThreadState==Waiting(5) 且 WaitReason==WrSuspended(5)。
+    #
+    # psutil 在 Windows 上不暴露 wait_reason（只有 Linux 有），所以必须走
+    # ctypes 的 NtQuerySystemInformation(SystemProcessInformation=5)。
+    # 结构体偏移按 x64 公开布局（phnt / Process Hacker 同源），写死并集中
+    # 在一个 dataclass 里，便于核对。
+
+    _SYS_PROC_INFO_CLASS = 5      # SystemProcessInformation
+    _STATUS_INFO_LEN_MISMATCH = 0xC0000004
+    _THREAD_STATE_WAITING = 5
+    _WAIT_REASON_SUSPENDED = 5    # KWAIT_REASON.WrSuspended
+    # x64 SYSTEM_THREAD_INFORMATION（sizeof=80）
+    _OFF_THREAD_STATE = 68
+    _OFF_WAIT_REASON = 72
+    _SIZEOF_THREAD_INFO = 80
+    # x64 SYSTEM_PROCESS_INFORMATION：线程数组从 +256 开始
+    _OFF_NUM_THREADS = 4
+    _OFF_PID = 80
+    _OFF_FIRST_THREAD = 256
+
+    def is_suspended_native(self, pid: int) -> bool | None:
+        """问内核这个进程**现在**是否真的被挂起。
+
+        返回 True / False；查询失败（权限、缓冲区、结构解析）返回 ``None``，
+        调用方应回退到内存账本语义 —— 永远不要把「未知」当「未挂起」。
+        """
+        if self._ntdll is None:
+            return None
+        size = 1 << 22  # 4 MiB 起步，不够就翻倍（进程多的大机器）
+        buf = None
+        try:
+            for _ in range(7):  # 最多翻到 256 MiB
+                buf = ctypes.create_string_buffer(size)
+                ret = self._ntdll.NtQuerySystemInformation(
+                    self._SYS_PROC_INFO_CLASS, buf, size, None)
+                if ret == 0:
+                    break
+                if ret == self._STATUS_INFO_LEN_MISMATCH:
+                    size *= 2
+                    continue
+                return None
+            else:
+                return None
+        except Exception:
+            return None
+
+        try:
+            off = 0
+            limit = size
+            while True:
+                base = ctypes.addressof(buf) + off
+                next_off = ctypes.c_uint32.from_address(base).value
+                n_threads = ctypes.c_uint32.from_address(
+                    base + self._OFF_NUM_THREADS).value
+                upid = ctypes.c_uint64.from_address(
+                    base + self._OFF_PID).value
+                if int(upid) == int(pid):
+                    if n_threads == 0:
+                        return None  # 读不到线程（权限）→ 未知
+                    tbase = base + self._OFF_FIRST_THREAD
+                    for i in range(n_threads):
+                        t = tbase + i * self._SIZEOF_THREAD_INFO
+                        state = ctypes.c_uint32.from_address(
+                            t + self._OFF_THREAD_STATE).value
+                        reason = ctypes.c_uint32.from_address(
+                            t + self._OFF_WAIT_REASON).value
+                        if (state != self._THREAD_STATE_WAITING
+                                or reason != self._WAIT_REASON_SUSPENDED):
+                            return False
+                    return True
+                if next_off == 0:
+                    return False  # 遍历完没找到 → 进程不存在
+                off += next_off
+                if off >= limit:
+                    return None
+        except Exception:
+            return None
 
     def enumerate(self) -> list[ProcessInfo]:
         """List processes in the current session (never ourselves).
@@ -985,6 +1097,11 @@ class MockProcessManager(ProcessManager):
         pass
 
     def is_suspended(self, pid: int) -> bool:
+        return pid in self.suspended
+
+    def is_suspended_native(self, pid: int) -> bool | None:
+        # Mock 语义：内存集合即「内核真值」—— Mock.suspend 挂上的就算挂着。
+        # 不在集合里一律 False（Mock 世界没有「未知」）。
         return pid in self.suspended
 
     def enumerate(self) -> list[ProcessInfo]:

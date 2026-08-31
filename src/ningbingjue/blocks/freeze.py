@@ -277,10 +277,27 @@ class FreezeBlock:
         # re-activation here; headless / test usage leaves it unset (no-op).
         self._refocus_cb: Any | None = None
         self._load_pids()
-        # 跨重启：内核挂起态随进程/系统一起丢失，磁盘上的 frozen_groups.json 只是
-        # 历史残留，绝不可能是「当前仍被挂起」的真实状态。启动时强制清空冻结列表并
-        # 落盘，避免 HUD 向用户显示误导性的「🔥 已冻结」标记（用户选择方案 A）。
-        self.frozen = []
+        # 跨启动的冻结记录校验（取代旧的「启动一律清空」方案 A）：
+        #
+        # 旧方案 A 的前提是「重启后内核挂起态必然已丢」，但掌机实测推翻了它：
+        # * 休眠/快速启动恢复：内核挂起**原样保留**，App 却把记录清了 →
+        #   已挂起的 steam 重新出现在「可冻结」区，用户再点一次 →
+        #   NtSuspendProcess 计数器叠加 → 之后一次 resume 解不开
+        #   （「窗口拉回来了但依旧冻结」）。
+        # * App 自身重启：挂起同样不随 App 退出而解除。
+        #
+        # 现在改为问内核（is_suspended_native）：组内任一成员仍被真实挂起
+        # → 保留整组；否则按残留清掉。查询不到（None，如 PID 已被复用成
+        # 不挂起的新进程）时维持方案 A 的保守行为（清掉），避免误标。
+        if self.pm is not None and getattr(self.pm, "available", False):
+            kept: list[_FrozenGroup] = []
+            for g in self.frozen:
+                if any(self.pm.is_suspended_native(int(p)) is True
+                       for p in g.pids):
+                    kept.append(g)
+            self.frozen = kept
+        else:
+            self.frozen = []
         self._save_pids()
         self.load_config()
 

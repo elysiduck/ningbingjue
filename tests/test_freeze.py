@@ -184,9 +184,28 @@ def test_pid_persistence():
     b1.handle_hotkey(0)
     b1.handle_hotkey(0)
     assert os.path.exists(b1._pid_file())
-    # fresh block reloads frozen pids
-    b2 = FreezeBlock(d, _pm())
+    # fresh block reloads frozen pids。注意复用同一个 pm 实例：真实世界里
+    # 内核挂起态是**全局**的（App 重启不解除挂起），启动校验靠
+    # is_suspended_native 问内核；Mock 的挂起账本却是每实例一份，
+    # 新实例查不到旧实例挂的进程 —— 共享实例才能模拟「内核还记得」。
+    b2 = FreezeBlock(d, pm)
     assert any(e.pid == 2 for e in b2.frozen)
+
+
+def test_startup_drops_stale_frozen_records():
+    """启动校验的负例：内核里已不挂起的记录（App 关闭期间进程被解冻/退出）
+    必须在启动时清掉并落盘 —— 否则 HUD 会把早已解冻的进程一直标成
+    「🔥 已冻结」。Mock 语义：新实例的 suspended 集合为空 = 内核不记得。"""
+    d = tempfile.mkdtemp()
+    import json
+    with open(os.path.join(d, "frozen_groups.json"), "w",
+              encoding="utf-8") as fh:
+        json.dump([{"pid": 7, "name": "stale.exe", "mem": 100,
+                    "family": "", "pids": [7]}], fh)
+    blk = FreezeBlock(d, _pm())  # 全新 Mock：suspended 为空 -> 残留
+    assert not blk.frozen
+    with open(os.path.join(d, "frozen_groups.json"), encoding="utf-8") as fh:
+        assert json.load(fh) == []  # 清空结果落盘，下次启动不再重复校验
 
 
 def test_theme_highlight_color():
@@ -557,13 +576,14 @@ def test_steam_family_group_resume_after_reload():
         ProcessInfo(pid=1, name="steam.exe", memory_mb=80, session_id=0),
         ProcessInfo(pid=2, name="steamwebhelper.exe", memory_mb=400, session_id=0),
     ]
-    b1 = FreezeBlock(d, _pm(*procs))
+    pm = _pm(*procs)  # 注释原意就是「same PM so suspend state persists」，
+    b1 = FreezeBlock(d, pm)  # 旧代码却新建了实例 —— 被启动盲清掩盖至今。
     b1.refresh_panel()
     b1.handle_hotkey(0)
     b1.handle_hotkey(0)  # freeze whole family
     assert {1, 2}.issubset(pm_suspended_of(b1))
     # reload (same PM so suspend state persists) — names backfilled on refresh
-    b2 = FreezeBlock(d, _pm(*procs))
+    b2 = FreezeBlock(d, pm)
     b2.refresh_panel()
     assert len(b2.frozen) == 1
     assert {1, 2}.issubset(pid for g in b2.frozen for pid in g.pids)
