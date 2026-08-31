@@ -5006,6 +5006,7 @@ class _OverlayWindow(QWidget):
         self._editor_old_snapshot = None
         self._editor_transition_dir = 1 if direction >= 0 else -1
         mode = self._editor_transition_mode()
+        self._et_dbg("ARM mode=%s ms=%s active_before=%s" % (mode, self._editor_transition_ms(), getattr(self, "_editor_transition_active", False)))
         if mode == "none" or self._editor_transition_ms() <= 0:
             return
         if getattr(self, "_editor_transition_active", False):
@@ -5015,12 +5016,15 @@ class _OverlayWindow(QWidget):
             old_pm = self._grab_page_snapshot()
         except Exception:
             old_pm = None
+        self._et_dbg("ARM snapshot None=%s" % (old_pm is None))
         if old_pm is None:
             return
         rect = self._page_viewport_rect()
+        self._et_dbg("ARM rect None=%s" % (rect is None))
         if rect is None:
             return
         self._editor_old_snapshot = old_pm
+        self._et_dbg("ARM armed ok")
         self._teardown_editor_veil()
         try:
             veil = TransitionVeil(self, mode, old_pm, None, self._editor_transition_dir)
@@ -5046,6 +5050,7 @@ class _OverlayWindow(QWidget):
         """
         old_pm = getattr(self, "_editor_old_snapshot", None)
         self._editor_old_snapshot = None
+        self._et_dbg("RUN enter old_present=%s" % (old_pm is not None))
         started = False
         try:
             if old_pm is None or old_pm.isNull():
@@ -5070,6 +5075,7 @@ class _OverlayWindow(QWidget):
             except Exception:
                 pass
             new_pm = self._grab_page_snapshot()
+            self._et_dbg("RUN new None=%s" % (new_pm is None))
             if new_pm is None:
                 raise RuntimeError("no editor new snapshot")
             if veil is None:
@@ -5088,6 +5094,7 @@ class _OverlayWindow(QWidget):
                     self._on_editor_transition_finished)
             self._editor_transition.start(veil, self._editor_transition_ms())
             started = True
+            self._et_dbg("RUN started mode=%s ms=%s" % (mode, self._editor_transition_ms()))
         except Exception:
             started = False
         if not started:
@@ -5122,6 +5129,15 @@ class _OverlayWindow(QWidget):
 
     def _on_editor_transition_finished(self) -> None:
         self._finish_editor_transition()
+
+    # --- 临时调试：定位编辑器转场为何不显示（确认后删除）--------------
+    def _et_dbg(self, msg: str) -> None:
+        try:
+            with open("C:/Users/13567/WorkBuddy/2026-07-18-10-22-49/ningbingjue/_editor_transition_dbg.txt",
+                      "a", encoding="utf-8") as _f:
+                _f.write(msg + "\n")
+        except Exception:
+            pass
 
     def _editor_transition_safety(self) -> None:
         """保底：动画回调万一丢失，强制收尾（盖罩绝不能永久置位）。"""
@@ -5350,6 +5366,7 @@ class _OverlayWindow(QWidget):
     # -- layout editor (in-window overlay) ---------------------------
     def _open_editor(self) -> None:
         """Toggle the full-window edit overlay (F2)."""
+        self._et_dbg("OPEN enter edit_mode=%s" % getattr(self._controller, "_edit_mode", None))
         if self._controller._edit_mode:
             self._close_editor()
             return
@@ -5501,7 +5518,11 @@ class _OverlayWindow(QWidget):
             self._prev_game_hwnd = 0
 
     def _return_to_game(self) -> None:
-        """手柄 Start（HUD 已在屏上时）：把 HUD 收进托盘；若记到了有效游戏窗口，则先把焦点还给它。
+        """手柄 Start（HUD 已在屏上时）：把 HUD 收进托盘；若记到了有效且**未冻结**的游戏窗口，则先把焦点还给它。
+
+        游戏被冻结（suspended）时**绝不**抢焦点、也**绝不**解冻——只收起 HUD，
+        让游戏安静停在后台暂停态（用户要的是『只最小化 NBJ，保持冻结』；且把
+        焦点交给挂起窗口正是历史『卡死』死局）。解冻请走冻结卡片的数字键。
 
         关键时序——在 HUD 仍处前台时先用 ``ShowWindow(SW_RESTORE)`` 恢复游戏
         窗口：因为当前进程是前台进程，Windows 允许它把焦点转让给目标窗口，于是
@@ -5518,15 +5539,15 @@ class _OverlayWindow(QWidget):
         try:
             game_hwnd = self._resolve_game_hwnd()
             if game_hwnd:
-                # 游戏仍被冻结（suspended）→ 先解冻再回。否则焦点交给一个无法
-                # pump 消息的挂起窗口，前台便卡在『冻住的游戏 + HUD 已收起』的
-                # 死局，正是用户报告的『摁下 Start 程序卡死』。解冻是异步的
-                # （OS NtResumeProcess 秒回），随后把焦点让回已恢复的游戏。
-                self._defrost_game_if_frozen(game_hwnd)
-                user32 = ctypes.windll.user32
-                # HUD 仍是前台时恢复游戏 → 焦点自然让渡，绕开前台锁。
-                user32.ShowWindow(game_hwnd, 9)  # SW_RESTORE = 9
-                user32.SetForegroundWindow(game_hwnd)
+                # 游戏若被冻结（suspended）：绝不恢复窗口 / 抢焦点 / 解冻——
+                # 把焦点交给一个无法 pump 消息的挂起窗口正是历史『卡死』死局，
+                # 且解冻会偷改用户明确的冻结状态（用户要的是『只最小化 NBJ，
+                # 保持冻结』）。故冻结时只收起 HUD，游戏安静停在后台暂停态。
+                if not self._is_game_frozen(game_hwnd):
+                    user32 = ctypes.windll.user32
+                    # HUD 仍是前台时恢复游戏 → 焦点自然让渡，绕开前台锁。
+                    user32.ShowWindow(game_hwnd, 9)  # SW_RESTORE = 9
+                    user32.SetForegroundWindow(game_hwnd)
         except Exception:  # noqa: BLE001
             pass
         # HUD 收进托盘（淡出后隐藏）。无论是否有可恢复的游戏窗口都执行——
@@ -5539,6 +5560,9 @@ class _OverlayWindow(QWidget):
     def _restore_game_only(self) -> None:
         """HUD 已隐藏时，Start 只负责把『被最小化的游戏窗口』恢复到前台，不召唤 HUD。
 
+        游戏被冻结时直接返回：保持冻结、不抢焦点、不解冻（与 ``_return_to_game``
+        一致）。想恢复暂停的游戏，请先在冻结卡片里手动解冻。
+
         仅 best-effort：记不到有效游戏窗口（``_prev_game_hwnd`` 缺失、或句柄已
         失效/被复用/属于桌面外壳）就什么都不做——既不 fallback 抢当前前台窗口
         （重启掌机后会误拉起『关机前的程序』），也绝不召唤 HUD，因为召唤是全局
@@ -5548,8 +5572,9 @@ class _OverlayWindow(QWidget):
             game_hwnd = self._resolve_game_hwnd()
             if not game_hwnd:
                 return
-            # 游戏仍被冻结 → 先解冻再回（同 _return_to_game 的修复）。
-            self._defrost_game_if_frozen(game_hwnd)
+            # 游戏若被冻结：保持冻结，不抢焦点、不解冻（同 _return_to_game）。
+            if self._is_game_frozen(game_hwnd):
+                return
             user32 = ctypes.windll.user32
             # SW_RESTORE=9：把被最小化的游戏窗口恢复并交还焦点。HUD 此时已隐藏，
             # 当前进程不是前台进程，但 SetForegroundWindow 在『用户刚按过键（Start）』
@@ -5618,13 +5643,18 @@ class _OverlayWindow(QWidget):
         except Exception:  # noqa: BLE001
             return False
 
-    def _defrost_game_if_frozen(self, hwnd: int) -> bool:
-        """若记忆的游戏窗口所属进程仍被冻结（suspended），经冻结卡片把整组
-        解冻，使 Start 能回到一个可响应的游戏（修复『冻结后按 Start 卡死』）。
-        best-effort，任何异常都不影响后续的焦点让渡。返回是否发起了解冻。"""
+    def _is_game_frozen(self, hwnd: int) -> bool:
+        """记忆的游戏窗口所属进程是否仍被冻结（suspended）——只读探测，绝不
+        改动冻结状态。
+
+        Start 据此决定要不要把焦点还给游戏窗口：冻结时一律不抢焦点、不解冻
+        （用户要的是『只最小化 NBJ，保持冻结』；且把焦点交给挂起窗口正是历史
+        『卡死』死局）。best-effort，任何异常都按『不可信』返回 False（宁可
+        误判为未冻结去抢焦点，也不因探测失败让 Start 整体失效）。"""
         try:
+            if not hwnd:
+                return False
             user32 = ctypes.windll.user32
-            ctypes.windll.kernel32
             pid = ctypes.c_ulong(0)
             user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
             if not pid.value:
@@ -5633,13 +5663,9 @@ class _OverlayWindow(QWidget):
             pm = getattr(fb, "pm", None)
             if pm is None or not getattr(pm, "available", False):
                 return False
-            if not pm.is_suspended(pid.value):
-                return False
-            if fb is not None and hasattr(fb, "unfreeze_by_pid"):
-                return bool(fb.unfreeze_by_pid(pid.value))
+            return bool(pm.is_suspended(pid.value))
         except Exception:  # noqa: BLE001
-            pass
-        return False
+            return False
 
     def _focus_from_start(self) -> None:
         """Gamepad Start = 一键回游戏：最小化凝冰结魄 + 恢复被最小化的游戏窗口。
