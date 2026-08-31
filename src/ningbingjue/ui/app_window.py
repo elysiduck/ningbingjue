@@ -413,7 +413,7 @@ class GamepadIcon(QWidget):
         super().__init__(parent)
         self._connected = False
         self._name = ""
-        self.setFixedSize(22, 16)
+        self.setFixedSize(34, 18)
         self.setCursor(Qt.CursorShape.WhatsThisCursor)
         self.setVisible(False)
 
@@ -439,42 +439,54 @@ class GamepadIcon(QWidget):
 
     def _draw(self, p: QPainter) -> None:
         """Draw the controller glyph onto ``p`` (injected painter so the same
-        routine is unit-testable without a live widget)."""
-        col = QColor(91, 227, 139)  # clear "connected" green
-        w = self.width()
+        routine is unit-testable without a live widget).
 
-        # --- controller body outline (rounded shell + two grips) ----------
-        body = QPainterPath()
-        body.moveTo(4, 3)
-        body.lineTo(w - 4, 3)
-        body.quadTo(w - 1, 3, w - 2, 7)
-        body.quadTo(w - 3, 10, w - 4, 14)        # right side down
-        body.quadTo(w - 5, 16, w - 9, 15)         # right grip bottom
-        body.quadTo(w - 12, 14, w - 13, 10)       # right grip inner up
-        body.lineTo(13, 10)                        # centre bottom (flat)
-        body.quadTo(12, 14, 9, 15)                 # left grip inner bottom
-        body.quadTo(5, 16, 4, 14)                  # left grip outer bottom
-        body.quadTo(3, 10, 2, 7)                   # left side up
-        body.quadTo(1, 3, 4, 3)                    # close
+        Slim symmetric silhouette (top edge narrow, two grips tucked in,
+        centre valley) — matches the redesigned HTML mockup.  Fixed green =
+        "connected" (semantic, not the breathing-light accent).
+        """
+        col = QColor(91, 227, 139)  # clear "connected" green
         pen = QPen(col)
-        pen.setWidthF(1.6)
+        pen.setWidthF(2.0)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
+
+        # --- controller body outline (slim shell + two tucked grips) -----
+        body = QPainterPath()
+        body.moveTo(12, 1)
+        body.lineTo(22, 1)
+        body.quadTo(26, 1, 27, 4)
+        body.quadTo(31, 7, 32, 13)
+        body.quadTo(33, 17, 29, 17)
+        body.quadTo(25, 17, 23, 12)
+        body.quadTo(21, 9, 17, 9)
+        body.quadTo(13, 9, 11, 12)
+        body.quadTo(9, 17, 5, 17)
+        body.quadTo(1, 17, 2, 13)
+        body.quadTo(3, 7, 7, 4)
+        body.quadTo(8, 1, 12, 1)
         p.drawPath(body)
 
         # --- D-pad cross (left) ------------------------------------------
-        cx, cy = 7.0, 8.0
-        arm = 2.4
         p.setBrush(col)
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawRect(QRectF(cx - arm, cy - 0.8, arm * 2, 1.6))
-        p.drawRect(QRectF(cx - 0.8, cy - arm, 1.6, arm * 2))
+        p.drawRoundedRect(QRectF(5.4, 5.2, 5.2, 2.2), 0.9, 0.9)
+        p.drawRoundedRect(QRectF(6.9, 3.8, 2.2, 5.2), 0.9, 0.9)
+
+        # --- twin analog sticks (centre) --------------------------------
+        sp = QPen(col)
+        sp.setWidthF(1.3)
+        p.setPen(sp)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for sx in (13, 21):
+            p.drawEllipse(QPointF(sx, 6), 1.6, 1.6)
 
         # --- four face buttons (right), diamond layout ------------------
-        bx, by = w - 8.0, 8.0
-        for dx, dy in ((0, -3), (3, 0), (0, 3), (-3, 0)):
-            p.drawEllipse(QPointF(bx + dx, by + dy), 1.3, 1.3)
+        p.setBrush(col)
+        p.setPen(Qt.PenStyle.NoPen)
+        for dx, dy in ((2, -1.8), (4, 0), (2, 1.8), (0, 0)):
+            p.drawEllipse(QPointF(24 + dx, 6 + dy), 1.3, 1.3)
 
 
 class _BatteryBar(QLabel):
@@ -936,15 +948,16 @@ class _OverlayWindow(QWidget):
         )
         header.addWidget(title, 1)
 
-        self._batt = _BatteryBar()
-        header.addWidget(self._batt)
-
         # Gamepad connection indicator: a compact vector gamepad glyph (no
         # text).  Connected -> green glyph (tooltip shows the pad name);
-        # disconnected -> hidden entirely to save header space.  Driven by the
+        # disconnected -> hidden entirely to save header space.  Sits to the
+        # LEFT of the battery readout per spec.  Driven by the
         # InteractionController's on_connection_changed callback.
         self._gp_status = GamepadIcon()
         header.addWidget(self._gp_status)
+
+        self._batt = _BatteryBar()
+        header.addWidget(self._batt)
 
         self._edit_btn = QPushButton("⚙️")
         self._edit_btn.setFlat(True)
