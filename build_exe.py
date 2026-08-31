@@ -80,6 +80,10 @@ def main(argv=None) -> int:
         "--name", "NingBingJue",
         "--windowed",
         "--uac-admin",
+        # 冻结产物的 .exe 文件图标 / 任务栏 fallback：与托盘、窗口图标同一冰块设计。
+        # 由 tools/icons/gen_nbj_icon.py 生成（多分辨率 PNG-in-ICO）。重生成：
+        #   runtime/python/python.exe tools/icons/gen_nbj_icon.py
+        "--icon", "tools/icons/nbj_icon.ico",
         # 自定义清单：在保留 requireAdministrator 的同时，把 DPI 感知升级为
         # PerMonitorV2（默认 admin 清单只是系统级 dpiAware，会导致外接屏上
         # 界面缩放失常）。--manifest 会整体替换 PyInstaller 自动生成的清单，

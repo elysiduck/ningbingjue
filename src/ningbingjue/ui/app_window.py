@@ -695,6 +695,71 @@ def _palette_from_accent(accent: "QColor") -> dict:
     }
 
 
+def _draw_ice_cube(p: "QPainter", size: int, accent: "QColor") -> None:
+    """在 size×size 透明画布上绘制全息冰块立方体（托盘/窗口/ICO 共用设计）。
+
+    内部在 64 逻辑坐标系绘制，再按 size/64 整体缩放，使同一份代码可渲染
+    任意分辨率而不丢失比例。accent 变则整图配色联动（见 _palette_from_accent）。
+    """
+    k = size / 64.0
+    p.save()
+    p.scale(k, k)
+
+    # 1) 圆角底框（暗）+ accent 描边外框
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QColor(20, 24, 33))
+    p.drawRoundedRect(5, 5, 54, 54, 14, 14)
+    p.setPen(QPen(accent, 2.4))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawRoundedRect(5, 5, 54, 54, 14, 14)
+
+    # 2) 中央等距立方体冰块：HSL palette 三面渐变
+    pal = _palette_from_accent(accent)
+    cx, top, w, h, side = 32.0, 10.0, 18.0, 10.5, 20.0
+    top_face = QPolygonF([
+        QPointF(cx, top), QPointF(cx + w, top + h),
+        QPointF(cx, top + 2 * h), QPointF(cx - w, top + h),
+    ])
+    left_face = QPolygonF([
+        QPointF(cx - w, top + h), QPointF(cx, top + 2 * h),
+        QPointF(cx, top + 2 * h + side), QPointF(cx - w, top + h + side),
+    ])
+    right_face = QPolygonF([
+        QPointF(cx + w, top + h), QPointF(cx, top + 2 * h),
+        QPointF(cx, top + 2 * h + side), QPointF(cx + w, top + h + side),
+    ])
+
+    # 左面：accent_dark → accent（深冷→主色，横向）
+    g_left = QLinearGradient(cx - w, 0, cx, 0)
+    g_left.setColorAt(0.0, pal["accent_dark"])
+    g_left.setColorAt(1.0, pal["accent"])
+    # 右面：comp_lit → comp_dark（暖亮→深暖，横向）
+    g_right = QLinearGradient(cx, 0, cx + w, 0)
+    g_right.setColorAt(0.0, pal["comp_lit"])
+    g_right.setColorAt(1.0, pal["comp_dark"])
+    # 顶面：高光主色 → 互补 → 互补亮（横向三色）
+    g_top = QLinearGradient(cx - w, 0, cx + w, 0)
+    g_top.setColorAt(0.0, pal["accent_lit"])
+    g_top.setColorAt(0.5, pal["comp"])
+    g_top.setColorAt(1.0, pal["comp_lit"])
+
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(QBrush(g_right)); p.drawPolygon(right_face)
+    p.setBrush(QBrush(g_left));  p.drawPolygon(left_face)
+    p.setBrush(QBrush(g_top));   p.drawPolygon(top_face)
+
+    # 3) 棱线（白色细描边，提轮廓，16px 下靠它撑住形状）
+    edge = QPen(QColor(255, 255, 255, 240), 1.4)
+    edge.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    p.setPen(edge)
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawPolygon(top_face)
+    p.drawPolygon(left_face)
+    p.drawPolygon(right_face)
+
+    p.restore()
+
+
 class _OverlayWindow(QWidget):
     """Top-most, frosted overlay holding one interactive panel per block."""
 
@@ -725,6 +790,12 @@ class _OverlayWindow(QWidget):
         # custom frosted paint (see paintEvent), so these values are inert.
         self._accent = QColor(127, 209, 255)  # neon cyan (#7fd1ff)
         self._breath_alpha = 1.0
+        # 窗口/任务栏/Alt-Tab 图标 = 与托盘同一冰块设计；运行时即覆盖 exe 默认图标，
+        # 无需重建打包即可在源码/portable 模式生效。accent 变更时在两处刷新路径同步更新。
+        try:
+            self.setWindowIcon(self._make_window_icon())
+        except Exception:  # noqa: BLE001
+            pass
         self._bg = QColor(16, 16, 16, 235)
         # Cached paint layers (see _rebuild_bg_cache): the full-window bg fill
         # is pre-rendered once (on geometry / theme / colour change) and blitted
@@ -1226,6 +1297,11 @@ class _OverlayWindow(QWidget):
         _tray = getattr(self, "_tray", None)
         if _tray is not None:
             _tray.setIcon(self._make_tray_icon())
+        # 窗口/任务栏图标随 accent 联动（与托盘同一设计）
+        try:
+            self.setWindowIcon(self._make_window_icon())
+        except Exception:  # noqa: BLE001
+            pass
         if not self._offscreen:
             self._breath.start_scanline()
         # EditOverlay was built before this block, so refresh its outer border
@@ -1798,6 +1874,11 @@ class _OverlayWindow(QWidget):
         tray = getattr(self, "_tray", None)
         if tray is not None:
             tray.setIcon(self._make_tray_icon())
+        # 窗口/任务栏图标随 accent 联动（与托盘同一设计）
+        try:
+            self.setWindowIcon(self._make_window_icon())
+        except Exception:  # noqa: BLE001
+            pass
         # The tray's frosted glow layer uses the breathing colour — rebuild it.
         self._rebuild_tray_glow()
         if not self._offscreen:
@@ -2556,7 +2637,7 @@ class _OverlayWindow(QWidget):
             pass
 
     def _make_tray_icon(self) -> QIcon:
-        """Render a small holographic ice-cube glyph icon (no font-glyph dependency).
+        """托盘图标：全息冰块立方体（与窗口/任务栏图标同一设计）。
 
         中央图形从「凝」字改为等距立方体冰块：顶面三色横向渐变（HSL palette
         从 accent 派生），左右两面分别是 accent 主色和互补色系；accent 变
@@ -2567,61 +2648,27 @@ class _OverlayWindow(QWidget):
         pm.fill(QColor(0, 0, 0, 0))
         p = QPainter(pm)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # 1) 圆角底框（暗）+ accent 描边外框
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QColor(20, 24, 33))
-        p.drawRoundedRect(5, 5, size - 10, size - 10, 14, 14)
-        p.setPen(QPen(self._accent, 2.4))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(5, 5, size - 10, size - 10, 14, 14)
-
-        # 2) 中央等距立方体冰块：HSL palette 三面渐变
-        pal = _palette_from_accent(self._accent)
-        cx, top, w, h, side = 32.0, 10.0, 18.0, 10.5, 20.0
-        top_face = QPolygonF([
-            QPointF(cx, top), QPointF(cx + w, top + h),
-            QPointF(cx, top + 2 * h), QPointF(cx - w, top + h),
-        ])
-        left_face = QPolygonF([
-            QPointF(cx - w, top + h), QPointF(cx, top + 2 * h),
-            QPointF(cx, top + 2 * h + side), QPointF(cx - w, top + h + side),
-        ])
-        right_face = QPolygonF([
-            QPointF(cx + w, top + h), QPointF(cx, top + 2 * h),
-            QPointF(cx, top + 2 * h + side), QPointF(cx + w, top + h + side),
-        ])
-
-        # 左面：accent_dark → accent（深冷→主色，横向）
-        g_left = QLinearGradient(cx - w, 0, cx, 0)
-        g_left.setColorAt(0.0, pal["accent_dark"])
-        g_left.setColorAt(1.0, pal["accent"])
-        # 右面：comp_lit → comp_dark（暖亮→深暖，横向）
-        g_right = QLinearGradient(cx, 0, cx + w, 0)
-        g_right.setColorAt(0.0, pal["comp_lit"])
-        g_right.setColorAt(1.0, pal["comp_dark"])
-        # 顶面：高光主色 → 互补 → 互补亮（横向三色）
-        g_top = QLinearGradient(cx - w, 0, cx + w, 0)
-        g_top.setColorAt(0.0, pal["accent_lit"])
-        g_top.setColorAt(0.5, pal["comp"])
-        g_top.setColorAt(1.0, pal["comp_lit"])
-
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(g_right)); p.drawPolygon(right_face)
-        p.setBrush(QBrush(g_left));  p.drawPolygon(left_face)
-        p.setBrush(QBrush(g_top));   p.drawPolygon(top_face)
-
-        # 3) 棱线（白色细描边，提轮廓，16px 下靠它撑住形状）
-        edge = QPen(QColor(255, 255, 255, 240), 1.4)
-        edge.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        p.setPen(edge)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawPolygon(top_face)
-        p.drawPolygon(left_face)
-        p.drawPolygon(right_face)
-
+        _draw_ice_cube(p, size, self._accent)
         p.end()
         return QIcon(pm)
+
+    def _make_window_icon(self) -> QIcon:
+        """窗口/任务栏/Alt-Tab 图标：与托盘同一冰块设计，多分辨率渲染。
+
+        QIcon 内嵌 16..256 多档位图，Windows 任务栏（小/大）、Alt-Tab
+        大缩略图、标题栏均按各自尺寸取用，accent 变则整体跟随换色。
+        """
+        icon = QIcon()
+        accent = self._accent
+        for sz in (16, 20, 24, 28, 32, 40, 48, 56, 64, 96, 128, 256):
+            pm = QPixmap(sz, sz)
+            pm.fill(QColor(0, 0, 0, 0))
+            p = QPainter(pm)
+            p.setRenderHint(QPainter.RenderHint.Antialiasing)
+            _draw_ice_cube(p, sz, accent)
+            p.end()
+            icon.addPixmap(pm)
+        return icon
 
 
     # -- minimize / restore fade (compositor-only opacity, 0 geometry cost) ----
