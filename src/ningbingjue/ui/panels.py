@@ -46,6 +46,7 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMenu,
     QMessageBox,
+    QProgressBar,
     QDialog,
     QPushButton,
     QScrollArea,
@@ -3098,16 +3099,14 @@ class TilePanel(BlockPanel):
 # perfmon — 只读性能监控
 # --------------------------------------------------------------------------
 class PerfMonPanel(BlockPanel):
-    """性能监控卡片：只读实时展示各项指标与负载判断结果。
+    """性能监控卡片（矩阵遥测重设计）：只读实时展示遥测 + 控制状态。
 
-    数据全部来自主窗口 ``perfmon_snapshot()``（聚合共享 MetricSampler +
-    降压状态机 + rtss/power 区块），本面板每 ~1s 由 sync 刷新一次，纯内存读、
-    零额外采样。无任何可交互控件，因此 ``nav_items`` 返回空列表。
+    数据全部来自主窗口 ``perfmon_snapshot()``。帧率来源：HWiNFO「呈现帧率(avg)」
+    优先（全局、不依赖前台 PID，规避 HUD/NBJ 置顶时误读 NBJ 自身帧率），RTSS
+    全局帧率兜底。卡片分两区：上方 2×4 遥测方块（FPS 高亮），底部控制状态药丸。
     """
 
     def _win(self):
-        # 弹窗模式下直接读注入的数据源（主窗口），避免 self.window() 指向
-        # 弹窗自身而找不到 perfmon_snapshot。
         prov = getattr(self, "_snapshot_provider", None)
         if prov is not None and hasattr(prov, "perfmon_snapshot"):
             return prov
@@ -3117,11 +3116,6 @@ class PerfMonPanel(BlockPanel):
         return None
 
     def _on_popout_clicked(self) -> None:
-        """标题「弹出」按钮：在主窗口与独立弹窗之间切换。
-
-        - 卡片内：调用主窗口 ``toggle_perfmon_popup()`` 打开 / 关闭弹窗。
-        - 弹窗内：``self.window()`` 即弹窗自身，直接关闭它。
-        """
         top = self.window()
         if getattr(top, "_is_perfmon_popup", False):
             top.close()
@@ -3129,7 +3123,7 @@ class PerfMonPanel(BlockPanel):
             top.toggle_perfmon_popup()
 
     def _setup(self) -> None:
-        # 标题行右侧「弹出独立窗口」按钮（与主窗口弹窗联动）
+        # 标题行右侧：来源标签 + 弹出按钮
         hdr = self._hdr
         self.root.removeWidget(hdr)
         hb = QHBoxLayout()
@@ -3137,176 +3131,156 @@ class PerfMonPanel(BlockPanel):
         hb.setSpacing(6)
         hb.addWidget(hdr)
         hb.addStretch(1)
-        self._pop_btn = QPushButton("\u29c9")  # ⧉ 弹出
+        self._src_lbl = QLabel("—")
+        self._src_lbl.setStyleSheet(
+            "color:#5a6b7c;font-size:10px;"
+            "font-family:ui-monospace,Consolas,monospace;")
+        hb.addWidget(self._src_lbl)
+        self._pop_btn = QPushButton("\u29c9")
         self._pop_btn.setFixedSize(22, 22)
         self._pop_btn.setToolTip("弹出独立监控窗口（再次点击关闭）")
         self._pop_btn.setStyleSheet(
             "QPushButton{color:#9fb0c8;background:rgba(255,255,255,0.06);"
             "border:1px solid rgba(255,255,255,0.18);border-radius:5px;"
             "font-size:14px;}"
-            "QPushButton:hover{color:#dfe6f0;border-color:rgba(127,209,255,0.7);}"
-        )
+            "QPushButton:hover{color:#dfe6f0;border-color:rgba(127,209,255,0.7);}")
         self._pop_btn.clicked.connect(self._on_popout_clicked)
         hb.addWidget(self._pop_btn)
         self.root.insertLayout(0, hb)
-        # 标题行与下方网格之间也保持紧凑
-        self.root.setSpacing(2)
+        self.root.setSpacing(8)
 
-        # 分类布局：第一类（状态/判定）与第二类（遥测/实测）之间用分隔线。
-        # 每行恢复「左列 标签/值 + 右列 标签/值」双列显示（4 列网格），比单列
-        # 更紧凑、信息密度更高；两个分类各自是一个 4 列网格，列宽/伸缩一致保证对齐。
-        LABEL_MIN = 50
-        VALUE_MIN = 30
-
-        def _mk_lab(text: str) -> QLabel:
-            # 少于 4 字的指标名（如「温度」「功耗」）改为「两段对齐」：在两个
-            # 字符之间插入全角空格，使标签视觉宽度撑满到 4 字指标（与「CPU负载」
-            # 「GPU频率」对齐），标签列更整洁。纯文本处理，不碰字体，规避 DPI/
-            # 样式表层叠导致字号漂移（HUD 文字必须显式 font-size）。
-            if len(text) < 4:
-                text = text[0] + ("　" * (4 - len(text))) + text[1:]
-            lab = QLabel(text)
-            lab.setMinimumWidth(LABEL_MIN)
-            lab.setWordWrap(False)
-            lab.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-            lab.setStyleSheet("color:#8b97aa;background:transparent;margin:0;padding:0;font-size:12px;")
-            return lab
-
-        def _mk_val() -> "_NoWrapElideLabel":
-            v = _NoWrapElideLabel("—")
-            v.setMinimumWidth(VALUE_MIN)
-            v.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
-            v.setStyleSheet("color:#dfe6f0;background:transparent;margin:0;padding:0;font-size:12px;")
-            return v
-
-        def _two_col_grid() -> "QGridLayout":
-            g = QGridLayout()
-            g.setContentsMargins(0, 0, 0, 0)
-            g.setVerticalSpacing(0)
-            g.setHorizontalSpacing(12)
-            # 列宽：标签列最小 50px、值列最小 30px（_NoWrapElideLabel 单行省略不换行）；
-            # 值列 stretch=1 等分剩余空间，网格占满卡片宽度（无左右留白）。
-            g.setColumnMinimumWidth(0, LABEL_MIN)
-            g.setColumnMinimumWidth(1, VALUE_MIN)
-            g.setColumnMinimumWidth(2, LABEL_MIN)
-            g.setColumnMinimumWidth(3, VALUE_MIN)
-            g.setColumnStretch(1, 1)
-            g.setColumnStretch(3, 1)
-            return g
-
-        self._rows: dict[str, QLabel] = {}
-
-        # 第一类：当前窗口 / 负载判断 / 窗口类型 / 是否降压 / 当前降压 / 锁帧状态
-        group_a = [
-            ("window",    "当前窗口"),
-            ("load",      "负载判断"),
-            ("wtype",     "窗口类型"),
-            ("undervolt", "是否降压"),
-            ("co",        "当前降压"),
-            ("frame",     "锁帧状态"),
+        # 遥测方块网格（2 列 × 4 行）
+        self._tiles = {}
+        grid = QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setVerticalSpacing(8)
+        grid.setHorizontalSpacing(8)
+        grid.setColumnStretch(0, 1)
+        grid.setColumnStretch(1, 1)
+        tile_defs = [
+            ("fps",   "帧率实测", True),
+            ("cpu",   "CPU 负载", False),
+            ("gpu",   "GPU 占用", False),
+            ("gfreq", "GPU 频率", False),
+            ("tcpu",  "温度 CPU", False),
+            ("tgpu",  "温度 GPU", False),
+            ("tdp",   "功耗 SoC", False),
+            ("batt",  "电池",     False),
         ]
-        # 第二类：CPU负载 / GPU频率 / GPU占用 / 帧率实测 / 温度 / 功耗
-        group_b = [
-            ("cpu_load", "CPU负载"),
-            ("gpu_freq", "GPU频率"),
-            ("gpu",      "GPU占用"),
-            ("fps_act",  "帧率实测"),
-            ("temp",     "温度"),
-            ("soc",      "功耗"),
-        ]
+        for i, (key, label, hl) in enumerate(tile_defs):
+            tile, val, bar = self._mk_tile(label, hl)
+            self._tiles[key] = (val, bar)
+            r, c = divmod(i, 2)
+            grid.addWidget(tile, r, c)
+        self.root.addLayout(grid)
 
-        # 成对指标（两个子值分行显示）：CPU负载(平均/峰值)、GPU频率(实际/锁定)、
-        # 温度(CPU/GPU)、功耗(SOC/电池)。这些键的值单元格改用多行标签。
-        MULTILINE = {"cpu_load", "gpu_freq", "temp", "soc"}
+        # 底部控制状态药丸
+        self._pills = {}
+        pill_row = QHBoxLayout()
+        pill_row.setContentsMargins(0, 6, 0, 0)
+        pill_row.setSpacing(6)
+        for key, txt in (("load", "负载"), ("uv", "降压"), ("frame", "锁帧")):
+            pill = self._mk_pill(txt)
+            self._pills[key] = pill
+            pill_row.addWidget(pill)
+        pill_row.addStretch(1)
+        self.root.addLayout(pill_row)
 
-        def _add_group(rows, multiline=None) -> None:
-            if multiline is None:
-                multiline = set()
-            g = _two_col_grid()
-            n = len(rows)
-            for i in range(0, n, 2):
-                r = i // 2
-                # 左列项（标签 0 / 值 1）
-                lk, ll = rows[i]
-                g.addWidget(_mk_lab(ll), r, 0)
-                l_val = _MultiValLabel("—") if lk in multiline else _mk_val()
-                g.addWidget(l_val, r, 1)
-                self._rows[lk] = l_val
-                #  - 右列项（标签 2 / 值 3），奇数长度时跳过
-                if i + 1 < n:
-                    rk, rl = rows[i + 1]
-                    g.addWidget(_mk_lab(rl), r, 2)
-                    r_val = _MultiValLabel("—") if rk in multiline else _mk_val()
-                    g.addWidget(r_val, r, 3)
-                    self._rows[rk] = r_val
-            self.root.addLayout(g)
-
-        _add_group(group_a)
-
-        # 两类之间的分隔线
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFrameShadow(QFrame.Shadow.Plain)
-        sep.setStyleSheet("QFrame{color:rgba(255,255,255,0.14);background:transparent;}")
-        sep.setFixedHeight(1)
-        sep_wrap = QHBoxLayout()
-        sep_wrap.setContentsMargins(0, 5, 0, 5)
-        sep_wrap.addWidget(sep)
-        self.root.addLayout(sep_wrap)
-
-        _add_group(group_b, MULTILINE)
-        # 字号固定；弹窗不再靠「放大字体」来填充窗口，而是把整张面板当作图像
-        # 等比缩放（QGraphicsProxyWidget）。这样行距不会异常变宽，缩放时内容
-        # 整体放大、无纵向空白带。
         self._base_font_px = 14
         pf = self.font()
-        # 卡片基准字号（像素）。曾误用 setPointSize(11) 导致放大；现用
-        # setPixelSize(14)，并整体放大以提升掌机高PPI下的可读性。
         pf.setPixelSize(self._base_font_px)
         pf.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
         self.setFont(pf)
-        # 偏差告警 toast（b 档）：PerfMonBlock 是虚拟区块（无 ui dict），基类
-        # BlockPanel 不会自动安装 _install_toast，这里手动装（沿用基类定位逻辑）。
         try:
             self._install_toast()
         except Exception:
             pass
 
+    def _mk_tile(self, label, hl):
+        tile = QFrame()
+        tile.setObjectName("perfTileHL" if hl else "perfTile")
+        tile.setStyleSheet(
+            "QFrame#perfTileHL{border:1px solid rgba(95,208,255,0.45);"
+            "border-radius:9px;background:rgba(95,208,255,0.05);}"
+            "QFrame#perfTile{border:1px solid rgba(255,255,255,0.10);"
+            "border-radius:9px;background:rgba(255,255,255,0.03);}")
+        v = QVBoxLayout(tile)
+        v.setContentsMargins(9, 7, 9, 8)
+        v.setSpacing(4)
+        k = QLabel(label)
+        k.setStyleSheet("color:#8b97aa;background:transparent;font-size:11px;")
+        v.addWidget(k)
+        val = QLabel("—")
+        val.setStyleSheet("color:#dfe6f0;background:transparent;font-size:17px;"
+                         "font-family:ui-monospace,Consolas,monospace;")
+        v.addWidget(val)
+        bar = QProgressBar()
+        bar.setTextVisible(False)
+        bar.setRange(0, 100)
+        bar.setFixedHeight(4)
+        bar.setValue(0)
+        bar.setStyleSheet(
+            "QProgressBar{background:rgba(255,255,255,0.08);border:none;"
+            "border-radius:3px;}"
+            "QProgressBar::chunk{background:%s;border-radius:3px;}" % self.accent)
+        v.addWidget(bar)
+        return tile, val, bar
+
+    def _mk_pill(self, text):
+        pill = QLabel(text)
+        pill.setStyleSheet(
+            "QLabel{color:#9aa6b8;background:rgba(255,255,255,0.05);"
+            "border:1px solid rgba(255,255,255,0.14);border-radius:20px;"
+            "padding:2px 9px;font-size:11px;}")
+        return pill
+
+    def _set_tile(self, key, text, pct=None, color=None):
+        t = self._tiles.get(key)
+        if t is None:
+            return
+        val, bar = t
+        if val.text() != text:
+            val.setText(text)
+        if color and val.styleSheet().find(color) < 0:
+            val.setStyleSheet(
+                f"color:{color};background:transparent;font-size:17px;"
+                f"font-family:ui-monospace,Consolas,monospace;")
+        if pct is not None:
+            bar.setValue(max(0, min(100, int(pct))))
+
+    def _set_pill(self, key, text, color):
+        p = self._pills.get(key)
+        if p is None:
+            return
+        if p.text() != text:
+            p.setText(text)
+        if p.styleSheet().find(color) < 0:
+            p.setStyleSheet(
+                f"QLabel{{color:{color};background:rgba(255,255,255,0.05);"
+                f"border:1px solid rgba(255,255,255,0.14);border-radius:20px;"
+                f"padding:2px 9px;font-size:11px;}}")
+
+    @staticmethod
+    def _fps_pct(fa, tf):
+        cap = tf if (tf and tf > 0) else 240
+        return min(100, fa / cap * 100)
+
     def _install_toast(self) -> None:
-        # PerfMonBlock 无 ui dict → 覆盖基类实现，直接装（_Label/_Toast 为
-        # 模块级组件，线程安全：信号转发到 GUI 线程）。
         self.toast_label = _Label()
         self.toast_panel = _Toast(self.toast_label, self)
 
-    @staticmethod
-    def _pct(v) -> str:
-        return f"{v:.0f}%" if isinstance(v, (int, float)) else "—"
-
-    def _set(self, key: str, text: str) -> None:
-        lab = self._rows.get(key)
-        if lab is None or getattr(lab, "_full", None) == text:
-            return
-        lab.setText(text)
-        lab.setStyleSheet("color:#dfe6f0;background:transparent;margin:0;padding:0;font-size:12px;")
-
-    def _setc(self, key: str, text: str, color: str) -> None:
-        lab = self._rows.get(key)
-        if lab is None:
-            return
-        if getattr(lab, "_full", None) != text:
-            lab.setText(text)
-        # 仅在颜色真正变化时重设样式表，避免每秒重解析触发 Qt 的
-        # "Could not parse stylesheet" 警告刷屏（样式本身合法，纯属冗余重设）。
-        if getattr(lab, "_last_color", None) != color:
-            lab.setStyleSheet(f"color:{color};background:transparent;margin:0;padding:0;font-size:12px;")
-            lab._last_color = color
+    def _src_set(self, text, color):
+        if self._src_lbl.text() != text:
+            self._src_lbl.setText(text)
+        if self._src_lbl.styleSheet().find(color) < 0:
+            self._src_lbl.setStyleSheet(
+                f"color:{color};font-size:10px;"
+                f"font-family:ui-monospace,Consolas,monospace;")
 
     def sync(self) -> None:
         win = self._win()
         if win is None:
             return
-        # 当独立弹窗已打开时，主窗口内的性能监控卡片停止刷新，由弹窗自己的定时器
-        # 驱动同一块面板的数据更新，避免两份面板同时跑 sync 浪费资源。
         top = self.window()
         if top is not None and not getattr(top, "_is_perfmon_popup", False):
             owner = getattr(self, "_snapshot_provider", None) or top
@@ -3316,119 +3290,99 @@ class PerfMonPanel(BlockPanel):
             s = win.perfmon_snapshot()
         except Exception:
             return
-        self._set("window", (s.get("window") or "桌面 / 无前台窗口"))
-        # 窗口类型：游戏 vs 其它（离散，颜色区分）
-        if s.get("is_game"):
-            self._setc("wtype", "游戏", "#7fd1ff")
+
+        # 来源标签
+        src = s.get("fps_source")
+        if src == "HWiNFO":
+            self._src_set("HWiNFO·呈现帧率", "#5fd0ff")
+        elif src == "RTSS":
+            self._src_set("RTSS 全局", "#7fb8ff")
         else:
-            self._setc("wtype", "其它程序", "#9aa6b8")
-        # 负载判断（颜色区分档位）
-        load = s.get("load", "idle")
-        load_label = s.get("load_label", "空闲")
-        load_color = {
-            "idle": "#9aa6b8", "light": "#ffd166",
-            "heavy": "#ff8a5c", "pinned": "#7fd1ff",
-        }.get(load, "#dfe6f0")
-        self._setc("load", load_label, load_color)
+            self._src_set("无帧率源", "#5a6b7c")
 
-        # 是否降压 = 降压控制卡片「自动降压」按钮开启状态
-        if s.get("undervolt_enabled"):
-            self._setc("undervolt", "是", "#4be38a")
-        else:
-            self._setc("undervolt", "否", "#9aa6b8")
-
-        # 当前降压值（实际下发的 CO，与按钮开关态解耦）
-        mv = int(s.get("undervolt_mv", 0))
-        uv_state = s.get("undervolt_state", "idle")
-        uv_validated = bool(s.get("undervolt_heavy_validated"))
-        if mv:
-            if uv_state == "heavy" and not uv_validated:
-                self._setc("co", f"CO={mv} (-50未验证)", "#ffd166")
-            else:
-                self._setc("co", f"CO={mv} mV", "#4be38a")
-        else:
-            self._setc("co", "0 (未降压)", "#9aa6b8")
-
-        # 锁帧状态（离散：已锁=绿 / 解锁=灰）
-        fs = s.get("frame_state", "未锁帧(解锁)")
-        if s.get("frame_unlocked"):
-            self._setc("frame", fs, "#9aa6b8")
-        else:
-            self._setc("frame", fs, "#4be38a")
-
-        # ---- 第二类：遥测 / 实测 ----
-        # CPU负载 = 平均 / 最大核心占用（两行分行：平均 / 峰值）
-        ca = s.get("cpu_avg")
-        cm = s.get("cpu_max")
-        if ca is not None or cm is not None:
-            parts = []
-            if ca is not None:
-                parts.append(f"平均 {ca:.0f}%")
-            if cm is not None:
-                parts.append(f"峰值 {cm:.0f}%")
-            self._set("cpu_load", "\n".join(parts))
-        else:
-            self._set("cpu_load", "—")
-
-        # GPU频率 = 实际频率 / 锁定频率（两行分行）。
-        # 注意：实际频率是 GPU 实际激活的频率（芯片为降功耗而动态变化），
-        # 锁定频率只是给 GPU 频率变化幅度设定的上限；二者本就不要求一致，
-        # 因此不再对「实际 vs 锁定」做偏差监测与冲突提醒。
-        ga = s.get("gpu_freq_actual")
-        tg = s.get("gpu_locked_freq")
-        if ga is not None and s.get("tel_fresh"):
-            actual = f"实际 {ga:.0f} MHz"
-            lock_txt = f"锁定 {tg:.0f} MHz" if tg else "锁定 —"
-            self._setc("gpu_freq", actual + "\n" + lock_txt, "#dfe6f0")
-        else:
-            self._setc("gpu_freq", "—", "#5a6b7c")
-
-        # GPU占用
-        self._set("gpu", self._pct(s.get("gpu")))
-
-        # 帧率实测：低于锁定目标 80% → 红字⚠
+        # 帧率实测
         fa = s.get("fps_actual")
         tf = s.get("fps_target")
         if fa is not None:
             txt = f"{fa:.0f} FPS"
             if tf and fa < tf * 0.8:
-                self._setc("fps_act", f"{txt} ⚠", "#ff8a5c")
+                self._set_tile("fps", txt, self._fps_pct(fa, tf), "#ff8a5c")
             else:
-                self._setc("fps_act", txt, "#dfe6f0")
+                self._set_tile("fps", txt, self._fps_pct(fa, tf), "#dfe6f0")
         else:
-            self._setc("fps_act", "—", "#5a6b7c")
+            self._set_tile("fps", "—", 0, "#5a6b7c")
 
-        # 温度（CPU / GPU 实测，每个子值单独一行并显示 °C 单位）
+        # CPU 负载 avg/peak
+        ca, cm = s.get("cpu_avg"), s.get("cpu_max")
+        if ca is not None or cm is not None:
+            a = f"{ca:.0f}" if ca is not None else "—"
+            m = f"{cm:.0f}" if cm is not None else "—"
+            self._set_tile("cpu", f"{a}/{m}%", cm if cm is not None else 0, "#dfe6f0")
+        else:
+            self._set_tile("cpu", "—", 0, "#5a6b7c")
+
+        # GPU 占用
+        g = s.get("gpu")
+        if g is not None:
+            self._set_tile("gpu", f"{g:.0f}%", g, "#dfe6f0")
+        else:
+            self._set_tile("gpu", "—", 0, "#5a6b7c")
+
+        # GPU 频率 实际/锁定
+        ga = s.get("gpu_freq_actual")
+        tg = s.get("gpu_locked_freq")
+        if ga is not None:
+            txt = f"{ga:.0f}" + (f" /{tg:.0f}" if tg else "")
+            self._set_tile("gfreq", txt, min(100, ga / 33.0), "#dfe6f0")
+        else:
+            self._set_tile("gfreq", "—", 0, "#5a6b7c")
+
+        # 温度 CPU / GPU
         tc = s.get("temp_cpu")
-        tgpu = s.get("temp_gpu")
-        if tc is not None or tgpu is not None:
-            parts = []
-            if tc is not None:
-                parts.append(f"CPU {tc:.0f}°C")
-            if tgpu is not None:
-                parts.append(f"GPU {tgpu:.0f}°C")
-            self._set("temp", "\n".join(parts))
+        if tc is not None:
+            self._set_tile("tcpu", f"{tc:.0f}°", min(100, tc),
+                           "#ff8a5c" if tc >= 85 else "#dfe6f0")
         else:
-            self._set("temp", "—")
+            self._set_tile("tcpu", "—", 0, "#5a6b7c")
+        tcg = s.get("temp_gpu")
+        if tcg is not None:
+            self._set_tile("tgpu", f"{tcg:.0f}°", min(100, tcg),
+                           "#ff8a5c" if tcg >= 85 else "#dfe6f0")
+        else:
+            self._set_tile("tgpu", "—", 0, "#5a6b7c")
 
-        # 功耗 = SOC 封装功耗 / 电池充放电（两行分行）
-        # tdp_actual = 封装(SoC)功耗 W；batt_charge_rate = HWiNFO 电池充放电率
-        # （负=放电 正=充电，单位 W；HWiNFO 无此传感器时为 None → 电池行显「电池 —」）。
+        # 功耗 SoC
         ta = s.get("tdp_actual")
-        br = s.get("batt_charge_rate")
         if ta is not None:
-            line1 = f"SOC {ta:.1f}W"
-            if br is not None:
-                line2 = f"{'放电' if br < 0 else '充电'} {abs(br):.1f}W"
-            else:
-                line2 = "电池 —"
-            self._set("soc", line1 + "\n" + line2)
+            self._set_tile("tdp", f"{ta:.1f}W", min(100, ta / 65.0 * 100), "#dfe6f0")
         else:
-            self._set("soc", "—")
+            self._set_tile("tdp", "—", 0, "#5a6b7c")
 
-        # 偏差告警 toast（b 档）：仅上升沿弹一次（_last_* 去抖），避免每 tick 刷。
-        # 注：gpu_dev_alert（GPU 实际 vs 锁定频率冲突）已取消——实际频率是芯片为
-        # 降功耗动态激活的频率，锁定频率只是幅度上限，二者本就不要求一致。
+        # 电池充放电
+        br = s.get("batt_charge_rate")
+        if br is not None:
+            self._set_tile("batt", f"{'放电' if br < 0 else '充电'} {abs(br):.1f}W",
+                           min(100, abs(br)), "#dfe6f0")
+        else:
+            self._set_tile("batt", "电池 —", 0, "#5a6b7c")
+
+        # 底部状态药丸
+        load = s.get("load", "idle")
+        load_label = s.get("load_label", "空闲")
+        lc = {"idle": "#9aa6b8", "light": "#ffd166",
+              "heavy": "#ff8a5c", "pinned": "#7fd1ff"}.get(load, "#dfe6f0")
+        self._set_pill("load", f"● {load_label}", lc)
+        mv = int(s.get("undervolt_mv", 0))
+        if s.get("undervolt_enabled"):
+            self._set_pill("uv", f"降压 CO=-{mv}", "#4be38a")
+        else:
+            self._set_pill("uv", "未降压", "#9aa6b8")
+        if s.get("frame_unlocked"):
+            self._set_pill("frame", "未锁帧", "#9aa6b8")
+        else:
+            self._set_pill("frame", s.get("frame_state", "已锁帧"), "#4be38a")
+
+        # 帧率偏差告警 toast（上升沿一次）
         for key, msg in (("fps_dev_alert", "锁帧未生效"),):
             armed = bool(s.get(key))
             if armed and not getattr(self, f"_last_{key}", False):
@@ -3441,7 +3395,6 @@ class PerfMonPanel(BlockPanel):
             setattr(self, f"_last_{key}", armed)
 
     def nav_items(self) -> list:
-        # 纯只读监控，无交互控件
         return []
 
 

@@ -35,6 +35,13 @@
       "GPU 占用"
     ],
     "fps": [
+      "呈现帧率",
+      "Presented FPS",
+      "Presented",
+      "Framerate (avg)",
+      "Framerate (平均)",
+      "平均帧率",
+      "平均帧数",
       "帧率",
       "Framerate",
       "FPS"

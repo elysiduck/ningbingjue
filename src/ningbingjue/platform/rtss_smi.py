@@ -212,6 +212,23 @@ def read_fps(pid: "int | None" = None) -> "float | None":
     return snap.fps_for(None)
 
 
+def read_fps_global() -> "float | None":
+    """全局实测 FPS：返回所有被 RTSS hook 的 3D 应用中最高的 FPS。
+
+    用于 HWiNFO 呈现帧率不可用时兜底。不依赖前台 PID —— 当 HUD(NBJ) 置顶时，
+    前台 PID 是 NBJ（非 3D，RTSS 不 hook），按前台 PID 取帧率会误读/取不到；
+    全局取最高 FPS 即当前真正在跑的游戏，规避该问题。
+    """
+    snap = instance().read()
+    if not snap.ok:
+        return None
+    best = None
+    for a in snap.apps:
+        if a.valid and (best is None or a.fps > best):
+            best = a.fps
+    return best
+
+
 if __name__ == "__main__":  # pragma: no cover - 交互冒烟
     snap = instance().read()
     print(f"ok={snap.ok} version=0x{snap.version:x} apps={len(snap.apps)} err={snap.err}")

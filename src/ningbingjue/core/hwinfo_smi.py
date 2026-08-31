@@ -368,7 +368,8 @@ DEFAULT_SENSOR_PATTERNS: "dict[str, list[str]]" = {
         "GPU 使用率", "GPU Utilization", "GPU 占用",
     ],
     "fps": [
-        "帧率", "Framerate", "FPS",
+        "呈现帧率", "Presented FPS", "Presented", "Framerate (avg)",
+        "Framerate (平均)", "平均帧率", "平均帧数", "帧率", "Framerate", "FPS",
     ],
     "batt_rate": [
         "电池充电率", "Battery Charge Rate", "电池放电率", "Battery Discharge Rate",

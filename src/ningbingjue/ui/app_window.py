@@ -3762,7 +3762,8 @@ class _OverlayWindow(QWidget):
           gpu_freq_target: 静态锁频目标（MHz，仅记录用；GPU 实际 vs 锁定
                             频率冲突告警已取消，不再参与判定）
           tdp_set        : TDP 滑块设定（W）
-          fps_actual     : RTSS 实测帧率（前台游戏 PID 匹配）
+          fps_actual     : 实测帧率（HWiNFO 呈现帧率(avg) 优先，RTSS 全局兜底）
+          fps_source     : 帧率来源 "HWiNFO" / "RTSS" / None
           fps_target     : RTSS 锁帧目标（仅 lock_enabled 时有）
           gpu_dev_alert  : 已停用（实际频率是芯片降功耗动态激活频率，锁定
                             频率只是幅度上限，二者本就不要求一致）
@@ -3857,6 +3858,7 @@ class _OverlayWindow(QWidget):
             out["temp_gpu"] = tel.temp_gpu
             out["gpu_util"] = tel.gpu_util
             out["batt_charge_rate"] = tel.batt_rate
+            out["fps_hwinfo"] = tel.fps_hwinfo
         except Exception:
             pass
         # 6b) 目标值（power 区块设定）。GPU 实际 vs 锁定频率冲突告警已取消，
@@ -3867,14 +3869,30 @@ class _OverlayWindow(QWidget):
                 out["tdp_set"] = int(getattr(power, "tdp", 0) or 0)
         except Exception:
             pass
-        # 6c) RTSS 实测帧率（按前台游戏 PID）+ 锁帧目标
+        # 6c) 实测帧率：HWiNFO「呈现帧率(avg)」优先（全局、不依赖前台 PID，
+        #     规避 HUD/NBJ 置顶时误读 NBJ 自身帧率）；RTSS 全局帧率兜底。
+        #     旧实现只取 RTSS 按前台 PID 读数，RTSS 未跑/未挂钩即 None → 永远「—」；
+        #     而 HWiNFO 呈现帧率虽已被读入 tel.fps_hwinfo 却从未接出（孤儿字段）。
         try:
-            from ..platform.rtss_smi import read_fps
-            from ..core.game_detect import find_foreground_pid
-            pid = find_foreground_pid()
-            out["fps_actual"] = read_fps(pid)
+            fps_val = None
+            fps_src = None
+            if out.get("tel_fresh") and out.get("fps_hwinfo") is not None:
+                fps_val = out["fps_hwinfo"]
+                fps_src = "HWiNFO"
+            if fps_val is None:
+                try:
+                    from ..platform.rtss_smi import read_fps_global
+                    rv = read_fps_global()
+                    if rv is not None:
+                        fps_val = rv
+                        fps_src = "RTSS"
+                except Exception:
+                    pass
+            out["fps_actual"] = fps_val
+            out["fps_source"] = fps_src
         except Exception:
             out["fps_actual"] = None
+            out["fps_source"] = None
         try:
             rtss = self._app.blocks.get("rtss")
             if rtss is not None and getattr(rtss, "lock_enabled", False):
