@@ -126,6 +126,30 @@ def main(argv=None) -> int:
     else:
         print("[build] NBJ_BUNDLE_RTSS 未开启 → 不内嵌 RTSS（运行时缺失将引导官方下载）")
 
+    # HWiNFO 便携二进制（与 RTSS 同款决策：默认不内嵌，仅 NBJ_BUNDLE_HWINFO=1）。
+    # 三条理由（2026-08-31 grill 决策）：
+    #   1. 再分发条款未确认——hwinfo.com/files/license.pdf 被 Cloudflare 挡住，
+    #      读不到原文，需用户自行核对；
+    #   2. 体积 10.9 MB，会让 portable 包近乎翻倍；
+    #   3. 免费版共享内存有 12 小时自动断供限制，内嵌也换不来「常驻可靠」，
+    #      收益不足以覆盖 1/2 的成本。
+    # 不内嵌时运行时走 hwinfo_deploy.ensure_hwinfo() → 返回 missing，
+    # HWiNFO 监控卡片引导用户去 hwinfo.com 下载便携版。
+    bundle_hwinfo = os.environ.get("NBJ_BUNDLE_HWINFO") == "1"
+    hwinfo_src = os.path.join(root, "src", "ningbingjue", "vendor", "HWiNFO")
+    if bundle_hwinfo:
+        if os.path.isdir(hwinfo_src):
+            args_list.append(
+                _data(hwinfo_src, r"ningbingjue/vendor/HWiNFO")
+            )
+            print(f"[build] NBJ_BUNDLE_HWINFO=1 → 内嵌 HWiNFO ({hwinfo_src})")
+        else:
+            print("[build] 警告：NBJ_BUNDLE_HWINFO=1 但 vendor/HWiNFO 不存在，跳过内嵌")
+            print("[build]       把官方便携包里的 HWiNFO64.exe 放到该目录即可。")
+    else:
+        print("[build] NBJ_BUNDLE_HWINFO 未开启 → 不内嵌 HWiNFO"
+              "（运行时缺失将引导官方下载）")
+
     # 当前配置：默认【不】打包（出厂默认）；仅 --with-config 才把本机
     # layout.json / config / buttons 烘焙进冻结文件夹。
     if with_config:

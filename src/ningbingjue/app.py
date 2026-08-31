@@ -411,6 +411,23 @@ class Application:
             self._log_block_failure("powerplan", e)
         _mark("powerplan")
 
+        # HWiNFO 监控：传感器数据源（进程/共享内存/12h 限制）状态观测。
+        # 放在 powerplan 之后、preset 之前注册：它是**只读观测 + 一键重启**，
+        # 不参与 preset 的快照维度；而 preset 仍必须是最后一个注册的区块。
+        # 卡片只做提示，绝不自动拉起/杀掉 HWiNFO（见 blocks/hwinfo.py）。
+        try:
+            # NBJ_SKIP_HWINFO=1 可彻底跳过本区块（调试用：本区块会探测外部进程
+            # 与共享内存，在排查启动耗时 / 干扰性问题时可一键摘除）。
+            if os.environ.get("NBJ_SKIP_HWINFO") != "1":
+                from .blocks.hwinfo import HwinfoBlock
+                blk = self._load_block("hwinfo", HwinfoBlock(cfg))
+                # 首次运行自部署（后台线程，不阻塞启动）。仅在有内置包时才真释放文件。
+                if blk is not None:
+                    blk.ensure_deploy_async()
+        except Exception as e:  # noqa: BLE001
+            self._log_block_failure("hwinfo", e)
+        _mark("hwinfo")
+
         # 配置预设：自由预设系统（替代原六档调度）。必须在 power/rtss/fan/powerplan
         # 之后注册，套用时通过各源区块的 OnApplyPreset 钩子回填。
         try:

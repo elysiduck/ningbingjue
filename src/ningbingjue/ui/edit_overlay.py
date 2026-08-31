@@ -4767,9 +4767,9 @@ class LayoutEditPanel(QWidget):
         gp_lbl.setStyleSheet("color:#9fb0c8;font-size:11px;font-weight:bold;")
         gp_row.addWidget(gp_lbl)
         gp_bar = GamepadHintBar([
-            ("Y", "编辑项·短按"),
-            ("Y", "保存·长按", True),
-            ("X", "隐藏·长按", True),
+            ("Y", "编辑项"),
+            ("Y", "保存", True),
+            ("X", "隐藏", True),
         ])
         gp_row.addWidget(gp_bar)
         gp_row.addStretch(1)

@@ -1220,6 +1220,23 @@ class InteractionController(QObject):
         # 落点即该行 col0 按钮（页眉=第1个动作钮、页脚=保存），A 可直接执行。
         if self._edit_mode and not self._edit_inner:
             if dx != 0:
+                # 横幅按钮行（页眉 / 页脚 / 保存·取消 / 抽屉 等无 card_token 的行）：
+                # 允许左右在同行按钮间移动焦点——这正是文档描述的「non-card 横幅
+                # 特例」。此前被外层严格锁错误地一并锁死，导致页脚 主题与蒙版 /
+                # 快捷键 / 排版效果 / 更多 等按钮手柄 / 键盘左右无法选中。
+                # 卡片整行（带 card_token）仍严格锁左右，必须先 A/Enter 进内层
+                # 才能选 ↑/↓/▲/▼，避免破坏两层导航。
+                if cur.card_token is None:
+                    tr = cur.row
+                    tc = cur.col + dx
+                    row_cols = self._grid_rows.get(tr)
+                    if not row_cols or tc not in row_cols:
+                        return False
+                    idx = row_cols[tc]
+                    if idx == self._focus:
+                        return False
+                    self.set_focus(idx)
+                    return True
                 return False
             tr = cur.row + dy
             tc = 0

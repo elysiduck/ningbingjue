@@ -4663,6 +4663,139 @@ class PowerPlanPanel(BlockPanel):
 
 
 # --------------------------------------------------------------------------
+# HWiNFO 监控（HwinfoBlock 的卡片）
+# --------------------------------------------------------------------------
+class HwinfoPanel(BlockPanel):
+    """HWiNFO 监控卡片：五层状态 + 12h 倒计时 + 关键读数 + 一键重启。
+
+    存在的意义就一条：**让「温度源静默回落到 ACPI」这件事无处藏身**。
+    fan 卡片的 ``TempSource="hwinfo"`` 一旦读不到数据就会静默改用 ACPI 皮肤温度
+    （比 CPU 结温低 10~20℃），风扇转速随之算低——「80℃ 风扇仍低转」的老坑。
+    免费版共享内存还有 12 小时自动断供的限制，所以这张卡必须常驻可见。
+
+    本卡片只读 + 一个手动按钮，**绝不自动拉起或杀掉 HWiNFO**（见
+    ``blocks/hwinfo.py`` 模块 docstring）。
+    """
+
+    # 状态 → (显示色, 角标文本)。色值跟着主题走，但语义色固定：
+    # 绿=可用 黄=即将到期 红=不可用 灰=未运行/未安装
+    _STATE_COLORS = {
+        "ok": "#4ade80",
+        "warning": "#f5d74b",
+        "stale": "#e64b5a",
+        "no_sm": "#e64b5a",
+        "stopped": "#8b97aa",
+        "missing": "#8b97aa",
+    }
+
+    def _setup(self) -> None:
+        # 第一行：状态点 + 状态文本
+        head = QHBoxLayout()
+        self.state_dot = QLabel("●")
+        self.state_dot.setStyleSheet("color:#8b97aa; font-size:13px;")
+        self.state_dot.setFixedWidth(14)
+        self.state_lbl = _label("检测中…", color="#cdd6e4", size=12)
+        head.addWidget(self.state_dot)
+        head.addWidget(self.state_lbl, 1)
+        self.root.addLayout(head)
+
+        # 第二行：版本 / 12h 倒计时 / 读数条数
+        self.meta_lbl = _label("", color="#8b97aa", size=11)
+        self.meta_lbl.setWordWrap(True)
+        self.root.addWidget(self.meta_lbl)
+
+        # 第三行：关键实测读数（CPU 结温 + 电池功率）
+        self.read_lbl = _label("", color="#cdd6e4", size=12)
+        self.read_lbl.setWordWrap(True)
+        self.root.addWidget(self.read_lbl)
+
+        # 弱提示行：可能没提权 / 部署状态。无内容时隐藏。
+        self.hint_lbl = _label("", color="#f5d74b", size=11)
+        self.hint_lbl.setWordWrap(True)
+        self.hint_lbl.setVisible(False)
+        self.root.addWidget(self.hint_lbl)
+
+        self.root.addStretch(1)
+
+        foot = QHBoxLayout()
+        self.restart_btn = _btn("重启 HWiNFO", self.accent)
+        foot.addWidget(self.restart_btn)
+        foot.addStretch(1)
+        self.root.addLayout(foot)
+        self._bind(self.restart_btn, "action")
+
+    # -- 动作 -------------------------------------------------------------
+    def _on_restart(self) -> None:
+        self.instance.restart_hwinfo()
+        self.sync()
+
+    # -- 状态绘制 ---------------------------------------------------------
+    def sync(self) -> None:
+        st = self.instance.probe_status()
+
+        color = self._STATE_COLORS.get(st.state, "#8b97aa")
+        self.state_dot.setStyleSheet(f"color:{color}; font-size:13px;")
+        self.state_lbl.setText(st.text)
+
+        # 角标：12h 倒计时（未知时不显示）
+        if st.remaining_s >= 0 and st.state in ("ok", "warning"):
+            self._corner_lbl.setText(f"剩余 {st.remaining_text()}")
+            self._corner_lbl.setStyleSheet(
+                f"color: {color}; font-size: 11px;" if st.state == "warning"
+                else "color: #9aa6b8; font-size: 11px;"
+            )
+            self._corner_lbl.setVisible(True)
+        else:
+            self._corner_lbl.setVisible(False)
+
+        # meta 行
+        bits = []
+        if st.version:
+            bits.append(f"v{st.version}")
+        if st.running:
+            h = int(st.uptime_s // 3600)
+            m = int((st.uptime_s % 3600) // 60)
+            bits.append(f"已运行 {h}h{m:02d}m")
+        bits.append(f"读数 {st.readings}" if st.sm_ok else "共享内存未连接")
+        self.meta_lbl.setText(" · ".join(bits))
+
+        # 读数行
+        reads = []
+        if st.temp_cpu is not None:
+            reads.append(f"CPU {st.temp_cpu:.0f}℃")
+        if st.batt_w is not None:
+            reads.append(f"电池 {'+' if st.batt_w >= 0 else ''}{st.batt_w:.1f}W")
+        self.read_lbl.setText(" · ".join(reads) if reads else "（暂无读数）")
+
+        # 弱提示
+        hints = []
+        if st.maybe_not_elevated:
+            hints.append("读数偏少，HWiNFO 可能没以管理员运行")
+        deploy_state, deploy_text = getattr(self.instance, "deploy_state", ("idle", ""))
+        if deploy_state == "missing":
+            hints.append("未检测到 HWiNFO，请前往 hwinfo.com 下载便携版")
+        elif deploy_state == "deployed":
+            hints.append(f"已自动部署：{deploy_text}")
+        self.hint_lbl.setText("；".join(hints))
+        self.hint_lbl.setVisible(bool(hints))
+
+        # 按钮：重启中置灰；未安装时改为引导语义（点了也只弹 toast）
+        if getattr(self.instance, "restarting", False):
+            self.restart_btn.setText("重启中…")
+            self.restart_btn.setEnabled(False)
+        else:
+            self.restart_btn.setEnabled(True)
+            self.restart_btn.setText(
+                "重启 HWiNFO" if st.running else "启动 HWiNFO"
+            )
+
+    def nav_items(self) -> list:
+        return [
+            NavItem(self.restart_btn, "action", confirm=lambda: self._on_restart()),
+        ]
+
+
+# --------------------------------------------------------------------------
 # Factory
 # --------------------------------------------------------------------------
 _PANELS = {
@@ -4680,6 +4813,7 @@ _PANELS = {
     "changelog": ChangelogPanel,
     "preset": PresetPanel,
     "powerplan": PowerPlanPanel,
+    "hwinfo": HwinfoPanel,
 }
 
 

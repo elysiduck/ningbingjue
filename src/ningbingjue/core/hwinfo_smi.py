@@ -6,10 +6,26 @@
   - 只做「独立测量参照」：提供 gpu_freq_actual / tdp_actual / temp_cpu /
     temp_gpu / gpu_util 等实测通道，供 perfmon 卡片显示「目标 vs 实测」与
     偏差告警（双重检验）。
-  - **绝不进入控制闭环**：GPU 浮动锁频 / 自动锁帧 / 负载门控降压继续吃
-    PDH 自愈通道（core/perf_probe.SharedMonitor）。HWiNFO 是外部进程，
-    轮询周期全局一档（掌机 INI SensorInterval=3000ms），数据陈旧/回退
-    跳变会污染迟滞与阈值状态机——这是架构红线。
+  - **控制闭环：默认禁止，唯一合法例外是风扇曲线，且必须带护栏。**
+    原红线是「绝不进入控制闭环」（GPU 浮动锁频 / 自动锁帧 / 负载门控降压继续
+    吃 PDH 自愈通道 core/perf_probe.SharedMonitor）。理由是 HWiNFO 是外部进程、
+    轮询周期全局一档（SensorInterval=3000ms），数据陈旧/回退跳变会污染迟滞与
+    阈值状态机。
+    但 ``blocks/fan.py::_read_temp`` 一直在把 ``temp_cpu`` 当风扇曲线的输入——
+    红线其实早就被踩过，只是 docstring 没跟上。2026-08-31 grill 决策把它收口为
+    **显式例外 + 强制护栏**，而非回滚功能（回滚会丢掉「CPU 结温驱动风扇」这个
+    唯一的准确来源）：
+
+      1. 允许 ``FanConfig.TempSource = "hwinfo"``，读到的温度进风扇曲线；
+      2. 读不到 / 陈旧 → fan 回落到 ACPI，这是既有的三层兜底（None/<0/>125）；
+      3. **回落绝不静默**：fan 必须置 ``temp_degraded=True`` 并在状态行显示
+         「⚠ 已回落 ACPI（HWiNFO 无数据·读数偏低）」且转警示色。
+
+    第 3 条为什么是硬要求：ACPI 皮肤温度比 CPU 结温低 10~20℃，回落会让风扇
+    转速被算低，即「80℃ 风扇仍低转」的复现。而**免费版共享内存有 12 小时
+    自动断供限制**（官方许可页 footnote 4），意味着这个回落会在长时间开机后
+    定时、静默地发生。没有护栏，用户只会觉得「风扇今天怎么不转了」。
+    状态检测的五层判据见 ``platform/hwinfo_status.py``。
   - HWiNFO 不在线 / 数据陈旧 → available=False / fresh=False，上层回退
     显示控制值或占位，绝不报错。
 

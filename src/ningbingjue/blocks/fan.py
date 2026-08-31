@@ -161,6 +161,15 @@ class FanBlock:
         self.last_pwm: int = 0
         self._temp_src_used: str = self.temp_source
         self._last_decision_ts = 0.0
+        # 温度源降级标记（grill 决策：回落必须明示，绝不静默）。
+        # 仅当用户在编辑面板把 TempSource 显式设成 "hwinfo" / "ec"（非默认 acpi），
+        # 而该来源实际读不到值、被迫回落到 ACPI 时才置 True。
+        #
+        # 为什么这条必须存在：ACPI 皮肤温度比 CPU 结温低 10~20℃，回落会让风扇
+        # 转速被算低——正是「80℃ 风扇仍低转」的老坑。而 HWiNFO 免费版的共享内存
+        # 有 12 小时自动断供限制，意味着这个回落会在长时间开机后**自动静默发生**。
+        # 没有这个标记，用户只会觉得「风扇今天怎么不转了」。
+        self.temp_degraded: bool = False
 
         # 滞回状态：last_band = 上次落档的曲线区间索引；只有当温度穿过
         # 区间边界 + hysteresis_c 才换档，避免风扇抽搐（MA TempDelay 同款）
@@ -365,6 +374,9 @@ class FanBlock:
         """
         src = self.temp_source
         val: Optional[float] = None
+        # 本次是否被迫从用户选定的来源回落到 ACPI。默认 True（还没读到任何值），
+        # 只有真从 hwinfo/ec 读到有效值时才置 False——这样短暂无值也会如实标记。
+        degraded = src in ("hwinfo", "ec")
         try:
             if src == "hwinfo":
                 val = self._read_temp_hwinfo()
@@ -377,11 +389,25 @@ class FanBlock:
                     self._temp_src_used = "acpi"
             else:
                 self._temp_src_used = src
+                degraded = False
         except Exception:  # noqa: BLE001
             val = self._read_temp_acpi()
             if val is not None:
                 self._temp_src_used = "acpi"
+        self.temp_degraded = degraded
         return val
+
+    @property
+    def temp_degraded_text(self) -> str:
+        """降级时给 UI 的一行说明；未降级返回空串。
+
+        调用方应把它拼在温度读数旁边（而不是替换掉读数），让用户既看到当前
+        数字，也看到「这个数字不可信」。
+        """
+        if not self.temp_degraded:
+            return ""
+        want = {"hwinfo": "HWiNFO", "ec": "EC"}.get(self.temp_source, self.temp_source)
+        return f"⚠ 已回落 ACPI（{want} 无数据·读数偏低）"
 
     def _read_temp_acpi(self) -> Optional[float]:
         """WMI ACPI 热区（默认来源，零依赖）。"""
@@ -962,11 +988,22 @@ class FanBlock:
                 if t is not None:
                     src_tag = {"acpi": "ACPI", "hwinfo": "HWiNFO", "ec": "EC"}.get(
                         self._temp_src_used, "ACPI")
-                    lbl.text = (f"✓ 曲线 · {src_tag} {t:.0f}℃"
-                                f" · {self.fan_rpm_display()}")
+                    # 降级时必须把警示拼进同一行：ACPI 皮肤温度比 CPU 结温低
+                    # 10~20℃，风扇转速会被算低。静默回落 = 「80℃ 风扇仍低转」
+                    # 老坑复现，用户却只看到一行正常的绿色「✓ 曲线」。
+                    warn = self.temp_degraded_text
+                    if warn:
+                        lbl.text = (f"⚠ 曲线 · {src_tag} {t:.0f}℃"
+                                    f" · {self.fan_rpm_display()} · {warn}")
+                        # 仍是「已应用」，但读数不可信 → 用警示色而非绿色。
+                        lbl.fore_color = COLOR_RED
+                    else:
+                        lbl.text = (f"✓ 曲线 · {src_tag} {t:.0f}℃"
+                                    f" · {self.fan_rpm_display()}")
+                        lbl.fore_color = COLOR_GREEN
                 else:
                     lbl.text = "✓ 曲线 · 温度读取中"
-                lbl.fore_color = COLOR_GREEN
+                    lbl.fore_color = COLOR_GREEN
             elif self.mode == MODE_SILENT:
                 if self.silent_pct <= 0:
                     lbl.text = "⚠ 风扇停转"

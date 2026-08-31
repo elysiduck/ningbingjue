@@ -62,7 +62,7 @@ from PyQt6.QtCore import (
 )
 # NOTE: QLinearGradient 于 2026-08-29 从本模块移除——托盘顶部的呼吸扫描线
 # 光带被用户要求「完全取消」后已无任何线性渐变绘制；方案 A 只用 QRadialGradient。
-from PyQt6.QtGui import (QColor, QFont, QIcon, QImage, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient, QRegion)
+from PyQt6.QtGui import (QBrush, QColor, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QPolygonF, QRadialGradient, QRegion)
 from PyQt6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -671,6 +671,28 @@ class _EditorDimOverlay(QWidget):
         # 仅编辑态托盘暗化蒙版（位于卡片之上、呼吸边框之下），不随呼吸调制。
         self._parent._paint_tray_border(p, w, h)
         p.end()
+
+
+def _palette_from_accent(accent: "QColor") -> dict:
+    """从 accent 派生 6 色 HSL 色板：accent 三档亮 + 互补色三档。
+
+    用于托盘图标三面渐变（顶/左/右）：accent 变则整套配色自动跟着走，
+    与呼吸灯主题保持联动。"""
+    h, s, l, _ = accent.getHsl()
+
+    def _make(deg: int = 0, light_mul: float = 1.0) -> QColor:
+        new_h = (h + deg) % 360
+        new_l = max(0, min(255, int(l * light_mul)))
+        return QColor.fromHsl(new_h, s, new_l)
+
+    return {
+        "accent_lit":  _make(0, 1.20),
+        "accent":      _make(0, 1.00),
+        "accent_dark": _make(0, 0.70),
+        "comp":        _make(180, 1.00),
+        "comp_lit":    _make(180, 1.20),
+        "comp_dark":   _make(180, 0.70),
+    }
 
 
 class _OverlayWindow(QWidget):
@@ -2534,35 +2556,73 @@ class _OverlayWindow(QWidget):
             pass
 
     def _make_tray_icon(self) -> QIcon:
-        """Render a small frosted-cyan glyph icon (no font-glyph dependency)."""
+        """Render a small holographic ice-cube glyph icon (no font-glyph dependency).
+
+        中央图形从「凝」字改为等距立方体冰块：顶面三色横向渐变（HSL palette
+        从 accent 派生），左右两面分别是 accent 主色和互补色系；accent 变
+        则整套配色自动跟着走，和呼吸灯主题联动。
+        """
         size = 64
         pm = self._make_dpr_pixmap(size, size)
         pm.fill(QColor(0, 0, 0, 0))
         p = QPainter(pm)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        # 1) 圆角底框（暗）+ accent 描边外框
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(20, 24, 33))
         p.drawRoundedRect(5, 5, size - 10, size - 10, 14, 14)
-        p.setPen(QPen(self._accent, 3))
+        p.setPen(QPen(self._accent, 2.4))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(5, 5, size - 10, size - 10, 14, 14)
-        # 中央"凝"字：实心 accent 色绘制。
-        # Qt drawText 同时使用 pen(描边/轮廓) 和 brush(填充)；
-        # 上一步描空心边框把 brush 设成 NoBrush 后只 setPen(accent) 不够，
-        # brush 还是 NoBrush → 字符仅 1px 细描边 + 在 16x16 托盘图标上几乎不可见
-        # （用户看到的"圆角方框里只有几个小波纹"即字形底部笔画的描边残影）。
-        # 修复：pen 与 brush 都设为 accent；该组合已与离屏 A/B 实验中实测
-        # 能稳定输出 156 个 accent 像素的标准"实心文字"路径对齐。
-        p.setPen(self._accent)
-        p.setBrush(self._accent)
-        f = QFont()
-        f.setBold(True)
-        f.setPixelSize(44)
-        f.setHintingPreference(QFont.HintingPreference.PreferFullHinting)
-        p.setFont(f)
-        p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "凝")
+
+        # 2) 中央等距立方体冰块：HSL palette 三面渐变
+        pal = _palette_from_accent(self._accent)
+        cx, top, w, h, side = 32.0, 10.0, 18.0, 10.5, 20.0
+        top_face = QPolygonF([
+            QPointF(cx, top), QPointF(cx + w, top + h),
+            QPointF(cx, top + 2 * h), QPointF(cx - w, top + h),
+        ])
+        left_face = QPolygonF([
+            QPointF(cx - w, top + h), QPointF(cx, top + 2 * h),
+            QPointF(cx, top + 2 * h + side), QPointF(cx - w, top + h + side),
+        ])
+        right_face = QPolygonF([
+            QPointF(cx + w, top + h), QPointF(cx, top + 2 * h),
+            QPointF(cx, top + 2 * h + side), QPointF(cx + w, top + h + side),
+        ])
+
+        # 左面：accent_dark → accent（深冷→主色，横向）
+        g_left = QLinearGradient(cx - w, 0, cx, 0)
+        g_left.setColorAt(0.0, pal["accent_dark"])
+        g_left.setColorAt(1.0, pal["accent"])
+        # 右面：comp_lit → comp_dark（暖亮→深暖，横向）
+        g_right = QLinearGradient(cx, 0, cx + w, 0)
+        g_right.setColorAt(0.0, pal["comp_lit"])
+        g_right.setColorAt(1.0, pal["comp_dark"])
+        # 顶面：高光主色 → 互补 → 互补亮（横向三色）
+        g_top = QLinearGradient(cx - w, 0, cx + w, 0)
+        g_top.setColorAt(0.0, pal["accent_lit"])
+        g_top.setColorAt(0.5, pal["comp"])
+        g_top.setColorAt(1.0, pal["comp_lit"])
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(g_right)); p.drawPolygon(right_face)
+        p.setBrush(QBrush(g_left));  p.drawPolygon(left_face)
+        p.setBrush(QBrush(g_top));   p.drawPolygon(top_face)
+
+        # 3) 棱线（白色细描边，提轮廓，16px 下靠它撑住形状）
+        edge = QPen(QColor(255, 255, 255, 240), 1.4)
+        edge.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(edge)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawPolygon(top_face)
+        p.drawPolygon(left_face)
+        p.drawPolygon(right_face)
+
         p.end()
         return QIcon(pm)
+
 
     # -- minimize / restore fade (compositor-only opacity, 0 geometry cost) ----
     def _clear_fading(self) -> None:
