@@ -39,6 +39,7 @@ from ..core.navigation import (
 )
 
 from ..platform import ec_io
+from ..platform.ec_io import QUIRK_PWM_MAX
 from ..core.thermal import ThermalProbe
 from .base import BlockBlueprint
 
@@ -141,6 +142,11 @@ class FanBlock:
             rpm_cfg = int(fc.ec_pwm_addr) + 1
         self.ec_rpm_addr = rpm_cfg
 
+        # EC 转速寄存器合法最大值（范围 1..pwm_max，非 0..255！）。wm2 系
+        # （Win Max 2 含 2025 HX370）= 184。0 = 未知 → 按旧 0-255 行为直写。
+        # detect_device() 命中机型时自动回填。详见 _ec_reg_value。
+        self.ec_pwm_max = max(0, min(255, int(getattr(fc, "ec_pwm_max", 0) or 0)))
+
         # Auto-detect device (MA-style model → protocol + register mapping).
         if self.auto_detect:
             self.detect_device(silent=True)
@@ -227,6 +233,7 @@ class FanBlock:
             ec_rpm_addr=self.ec_rpm_addr,
             temp_source=self.temp_source,
             ec_temp_addr=self.ec_temp_addr,
+            ec_pwm_max=self.ec_pwm_max,
         )
         self.config.fan_config = fc
         return fc
@@ -252,6 +259,7 @@ class FanBlock:
         if not rpm_cfg:
             rpm_cfg = int(fc.ec_pwm_addr) + 1
         self.ec_rpm_addr = rpm_cfg
+        self.ec_pwm_max = max(0, min(255, int(getattr(fc, "ec_pwm_max", 0) or 0)))
         self._apply_protocol()
         self.applied = False
         self._last_band_idx = -1
@@ -262,6 +270,30 @@ class FanBlock:
     # -- helpers ----------------------------------------------------
     def _clamp_pct(self, v: int) -> int:
         return max(self.PWM_MIN, min(self.PWM_MAX, v))
+
+    # -- EC 寄存器范围换算 ---------------------------------------------
+    # 根因（2026-09-01，用户实测「94% 以上再调无效」+ Linux 内核 gpd-fan
+    # 驱动 / MotionAssistant 反编译双源确认）：
+    #   GPD wm2 系（Win Max 2 全系含 2025 HX370）EC 转速寄存器 0x1809 的
+    #   合法范围是 **1..184**，不是 0..255。win_mini/duo = 244，win4 = 127。
+    #   旧代码把内部 0-255 的 PWM 值原样直写：185-255 属超范围值，EC 固件
+    #   对其饱和处理 → UI 上 94%（≈240/255）以上再调也没有任何变化。
+    # 换算公式对齐内核 gpd_cast_pwm_range()：
+    #   EC值 = round(pwm * (pwm_max - 1) / 255) + 1   （0-255 → 1..pwm_max）
+
+    @property
+    def ec_reg_max(self) -> int:
+        """当前机型 EC 转速寄存器的合法最大值；未知时 255（= 旧行为直写）。"""
+        m = int(getattr(self, "ec_pwm_max", 0) or 0)
+        return m if 1 <= m <= 255 else 255
+
+    def _ec_reg_value(self, pwm: int) -> int:
+        """内部 0-255 PWM → EC 寄存器值（1..pwm_max，对齐内核换算）。"""
+        m = self.ec_reg_max
+        if m >= 255:
+            return self._clamp_pct(pwm)
+        v = int(round(self._clamp_pct(pwm) * (m - 1) / 255.0)) + 1
+        return max(1, min(m, v))
 
     def pwm_to_pct(self, pwm: int) -> int:
         """把内部 PWM 值（0-255）换算成「占最大转速的百分比」（0-100）。"""
@@ -283,7 +315,8 @@ class FanBlock:
 
     def set_detected_mapping(self, quirk: str, protocol: str,
                              enable_addr: int, pwm_addr: int, rpm_addr: int,
-                             model_hint: str = "", persist: bool = True) -> None:
+                             model_hint: str = "", persist: bool = True,
+                             pwm_max: int = 0) -> None:
         """Lock in a device mapping the user has empirically confirmed working.
 
         Used by the brute-force fan test: after the user confirms which probe
@@ -295,12 +328,16 @@ class FanBlock:
 
         ``protocol`` is accepted for forward-compatibility but the live routing
         is derived from ``board_quirk`` (win4 -> 2e2f, else 4e4f) so it stays
-        consistent with ``_apply_protocol``.
+        consistent with ``_apply_protocol``.  ``pwm_max`` 0 → 按 board_quirk
+        从 QUIRK_PWM_MAX 兜底查表（查不到保持原值）。
         """
         self.board_quirk = str(quirk)
         self.ec_enable_addr = int(enable_addr)
         self.ec_pwm_addr = int(pwm_addr)
         self.ec_rpm_addr = int(rpm_addr) if int(rpm_addr) else int(pwm_addr) + 1
+        pm = int(pwm_max or 0) or QUIRK_PWM_MAX.get(self.board_quirk, 0)
+        if pm:
+            self.ec_pwm_max = max(0, min(255, pm))
         self.auto_detect = False  # 锁定用户确认过的映射，避免启动检测覆写
         self._apply_protocol()
         if model_hint:
@@ -333,6 +370,12 @@ class FanBlock:
         self.board_quirk = str(info.get("board_quirk", self.board_quirk))
         self.ec_enable_addr = int(info.get("enable_addr", self.ec_enable_addr))
         self.ec_pwm_addr = int(info.get("pwm_addr", self.ec_pwm_addr))
+        # EC 转速寄存器合法最大值（wm2=184 等）。matched 时用映射表里的值；
+        # 信息缺失时按 quirk 兜底查表，仍拿不到才保留旧值。
+        pm = int(info.get("pwm_max", 0) or 0) or QUIRK_PWM_MAX.get(
+            self.board_quirk, 0)
+        if pm:
+            self.ec_pwm_max = max(0, min(255, pm))
         # 转速计寄存器：matched 时用映射表里的值；若当前配置已手动指定则保留
         rpm = int(info.get("rpm_addr", 0) or 0)
         if rpm:
@@ -464,27 +507,32 @@ class FanBlock:
     def _write_fan_pwm(self, pwm: int, reason: str = "tick") -> bool:
         """写转速到 EC（先使能，再写转速寄存器）。
 
+        ``pwm`` 是内部 0-255 标度；写入前经 ``_ec_reg_value`` 换算到当前机型
+        EC 寄存器的合法范围（wm2 系 1..184）。
+
         返回 False 时调用方应 SKIP（不动 last_pwm，下个 tick 重试）。
         返回 True 表示已成功发出写入指令（不保证 EC 实际生效，那是固件事）。
         """
         if not self._ec_health():
             _log_fan("SKIP", reason="ec_unavailable", pwm=pwm)
             return False
+        reg = self._ec_reg_value(pwm)
         # 使能手动模式（每次写都重新使能，幂等，对齐 MA FanControl.cs:894）。
         # ec_enable_addr == 0 表示该机型（Win4 / Win Mini / Duo）无独立「使能
         # 手动」寄存器，直写转速寄存器即可（写 0 即交还 BIOS 自动控制）。
         if self.ec_enable_addr:
             ok_enable = self._ec.write_ec(self.ec_enable_addr, 1)
             if not ok_enable:
-                _log_fan("SKIP", reason="enable_failed", pwm=pwm)
+                _log_fan("SKIP", reason="enable_failed", pwm=pwm, reg=reg)
                 return False
-        ok_pwm = self._ec.write_ec(self.ec_pwm_addr, pwm & 0xFF)
+        ok_pwm = self._ec.write_ec(self.ec_pwm_addr, reg & 0xFF)
         if not ok_pwm:
             _log_fan("SKIP", reason="pwm_write_busy",
-                     pwm=pwm, addr=self.ec_pwm_addr)
+                     pwm=pwm, reg=reg, addr=self.ec_pwm_addr)
             return False
         self.last_pwm = pwm
-        _log_fan("WRITE", pwm=pwm, reason=reason, addr=self.ec_pwm_addr)
+        _log_fan("WRITE", pwm=pwm, reg=reg, reg_max=self.ec_reg_max,
+                 reason=reason, addr=self.ec_pwm_addr)
         return True
 
     def _restore_auto(self) -> bool:

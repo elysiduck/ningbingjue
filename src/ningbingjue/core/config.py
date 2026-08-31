@@ -413,6 +413,11 @@ class FanConfig:
                                     地址未知时填 0 即回落 acpi。
       ec_temp_addr  : EC「CPU 温度」低字节寄存器地址（摄氏度，0~125 合理）。
                       仅 temp_source="ec" 时生效；0 = 未设置 → 回落 acpi。
+      ec_pwm_max    : EC 转速寄存器的**合法最大值**（范围 1..pwm_max，非 0..255）。
+                      来源 = Linux 内核 gpd-fan 驱动 + MA 反编译：wm2 系
+                      （Win Max 2 全系含 2025 HX370）= 184，win_mini/duo = 244，
+                      win4(6800U) = 127。0 = 未知 → 写入按旧 0-255 行为（不换算）。
+                      detect_device() 命中机型时自动回填并持久化。
     """
     mode: str = "auto"
     manual_pct: int = 128
@@ -434,6 +439,7 @@ class FanConfig:
     ec_rpm_addr: int = 0
     temp_source: str = "acpi"
     ec_temp_addr: int = 0
+    ec_pwm_max: int = 0
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "FanConfig":
@@ -472,6 +478,7 @@ class FanConfig:
             ec_rpm_addr=int(d.get("EcRpmAddr", 0) or 0),
             temp_source=str(d.get("TempSource", "acpi") or "acpi"),
             ec_temp_addr=int(d.get("EcTempAddr", 0) or 0),
+            ec_pwm_max=int(d.get("EcPwmMax", 0) or 0),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -490,6 +497,7 @@ class FanConfig:
             "EcRpmAddr": self.ec_rpm_addr,
             "TempSource": self.temp_source,
             "EcTempAddr": self.ec_temp_addr,
+            "EcPwmMax": self.ec_pwm_max,
         }
 
 

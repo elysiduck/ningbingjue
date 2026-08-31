@@ -1451,13 +1451,15 @@ def run_fan_selftest_dialog(parent: QWidget) -> None:
 
 
 # 暴力测试各方法 → 设备映射（quirk, protocol, enable_addr, pwm_addr, rpm_addr）
+# 末列 = EC 转速寄存器合法最大值 pwm_max（wm2=184 / win_mini=244 / win4=127，
+# 来源 = Linux 内核 gpd-fan 驱动；0 = 未知，走 quirk 兜底查表）。
 _BRUTE_METHOD_MAP = {
-    "A": ("wm2",      "4e4f", 629,   6153,  6154),
-    "B": ("win_mini", "4e4f", 0,     1146,  1147),
-    "C": ("win4",     "2e2f", 0,     49937, 49938),
+    "A": ("wm2",      "4e4f", 629,   6153,  6154,  184),
+    "B": ("win_mini", "4e4f", 0,     1146,  1147,  244),
+    "C": ("win4",     "2e2f", 0,     49937, 49938, 127),
     # 标准 EC 端口（Zotac 类）卡片的 SIO 路径暂不支持，命中时只提示不持久化
-    "D": ("std_74",   "std",  0x74,  0x75,  0),
-    "E": ("std_64",   "std",  0x64,  0x65,  0),
+    "D": ("std_74",   "std",  0x74,  0x75,  0,     0),
+    "E": ("std_64",   "std",  0x64,  0x65,  0,     0),
 }
 
 
@@ -1499,9 +1501,9 @@ def _apply_brute_mapping(parent, key: str) -> None:
             "当前风扇卡片基于 SIO 寄存器窗口(4E4F/2E2F)，暂不支持这种机型。\n"
             "请把这个结果反馈给开发者，以便加入标准 EC 支持。")
         return
-    quirk, proto, en, pwm, rpm = _BRUTE_METHOD_MAP[key]
+    quirk, proto, en, pwm, rpm, pmax = _BRUTE_METHOD_MAP[key]
     blk.set_detected_mapping(quirk, proto, en, pwm, rpm,
-                             model_hint=f"暴力测试确认({key})")
+                             model_hint=f"暴力测试确认({key})", pwm_max=pmax)
     _persist_parent(parent)
     QMessageBox.information(
         parent, "已锁定设备映射",

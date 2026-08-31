@@ -737,7 +737,7 @@ def diag_info() -> dict:
 # the runtime model string against it.
 #
 # Tuple: (match_substring_lowercase, board_quirk, protocol, enable_addr,
-#          pwm_addr, rpm_addr)
+#          pwm_addr, rpm_addr, pwm_max)
 #   - enable_addr == 0 → no separate "manual enable" register (write PWM direct)
 #   - protocol      → "4e4f" (SIO ports 0x4E/0x4F) or "2e2f" (0x2E/0x2F)
 #   - rpm_addr      → EC RAM address of the fan tachometer LOW byte (16-bit
@@ -745,12 +745,25 @@ def diag_info() -> dict:
 #                     ECs the tach usually sits right after the PWM register, so
 #                     our defaults are pwm_addr + 1.  If a device reports garbage
 #                     RPM the user can override ec_rpm_addr in the fan edit panel.
+#   - pwm_max       → EC 转速寄存器的**合法最大值**（范围 1..pwm_max，非 0..255！）。
+#                     来源：Linux 内核 gpd-fan 驱动 gpd_cast_pwm_range() +
+#                     MotionAssistant 反编译双源一致：
+#                       wm2 (Win Max 2 全系含 2025 HX370) = 184
+#                       win_mini / duo = 244，win4 (6800U) = 127
+#                     0-255 换算公式（内核原样）：round(pwm*(pwm_max-1)/255)+1。
+#                     超范围直写（如 255）会被 EC 固件饱和 → UI 上 94% 以上
+#                     「再调无变化」的根因（2026-09-01 用户实测）。
 FAN_DEVICE_MAP: list[tuple] = [
-    ("win max 2", "wm2", "4e4f", 629, 6153, 6154),
-    ("win mini", "win_mini", "4e4f", 0, 1146, 1147),
-    ("win 4", "win4", "2e2f", 0, 49937, 49938),
-    ("duo", "duo", "4e4f", 0, 1147, 1148),
+    ("win max 2", "wm2", "4e4f", 629, 6153, 6154, 184),
+    ("win mini", "win_mini", "4e4f", 0, 1146, 1147, 244),
+    ("win 4", "win4", "2e2f", 0, 49937, 49938, 127),
+    ("duo", "duo", "4e4f", 0, 1147, 1148, 244),
 ]
+
+# board_quirk → pwm_max 快查（暴力测试确认映射时 / 未走 detect 路径时兜底用）。
+QUIRK_PWM_MAX: dict[str, int] = {
+    quirk: int(pmax) for _, quirk, _, _, _, _, pmax in FAN_DEVICE_MAP
+}
 
 # Normalized alias tokens per device (lowercase, alnum-only).
 #
@@ -875,6 +888,7 @@ def detect_device() -> dict:
           "enable_addr": int,    # 0 = no separate enable register
           "pwm_addr": int,       # EC RAM address for fan speed (PWM)
           "rpm_addr": int,       # EC RAM address for fan tachometer low byte
+          "pwm_max": int,        # EC 转速寄存器合法最大值（范围 1..pwm_max）
         }
     """
     result: dict = {
@@ -885,13 +899,14 @@ def detect_device() -> dict:
         "enable_addr": 629,
         "pwm_addr": 6153,
         "rpm_addr": 6154,
+        "pwm_max": 184,
     }
     model = read_system_model()
     if not model:
         return result
     result["model"] = model
     norm = _norm_model(model)
-    for substr, quirk, proto, enable, pwm, rpm in FAN_DEVICE_MAP:
+    for substr, quirk, proto, enable, pwm, rpm, pmax in FAN_DEVICE_MAP:
         # Match on the (space-stripped) display substring AND on the normalized
         # alias tokens, so both "GPD Win Max 2" and "GPD WinMax2" hit WM2.
         tokens = [substr.replace(" ", "")] + list(_DEVICE_ALIASES.get(quirk, []))
@@ -903,6 +918,7 @@ def detect_device() -> dict:
                 enable_addr=int(enable),
                 pwm_addr=int(pwm),
                 rpm_addr=int(rpm),
+                pwm_max=int(pmax),
             )
             break
     return result
