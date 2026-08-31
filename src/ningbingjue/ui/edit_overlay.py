@@ -163,21 +163,24 @@ def _tile_apply_colors(btn: "TileButton", t: Any, accent: Any) -> None:
 
     空覆盖：边框回退呼吸灯主题色 ``accent``，背景回退默认磁贴底色
     ``TILE_BG``；非空覆盖按 'R,G,B' 解析后生效（解析失败则沿用回退值）。
+    边框 'none' = 透明（无边框，边框色取背景色，视觉无描边）。
     """
-    border_col = accent
     back_col = TILE_BG
-    bc = getattr(t, "border_color", "") or ""
-    if bc:
-        try:
-            r, g, b = (int(x) for x in bc.split(","))
-            border_col = Color(r, g, b)
-        except Exception:
-            pass
     bgc = getattr(t, "bg_color", "") or ""
     if bgc:
         try:
             r, g, b = (int(x) for x in bgc.split(","))
             back_col = Color(r, g, b)
+        except Exception:
+            pass
+    border_col = accent
+    bc = getattr(t, "border_color", "") or ""
+    if bc == "none":
+        border_col = back_col
+    elif bc:
+        try:
+            r, g, b = (int(x) for x in bc.split(","))
+            border_col = Color(r, g, b)
         except Exception:
             pass
     btn.set_colors(back_col, TILE_BG_HOVER, border_col, TILE_FOCUS_BORDER)
@@ -705,26 +708,24 @@ class TileEditPanel(QWidget):
         f_nc.addWidget(self._name_color, 1)
         tf.addLayout(f_nc)
 
-        # 边框色：点选预设 + 自定义取色（空点 = 跟随呼吸灯主题色）。
+        # 边框色：点选预设 + 自定义取色。空点=跟随呼吸灯主题色；额外透明点=无边框。
         f_bdr = QHBoxLayout()
         f_bdr.addWidget(QLabel("边框"))
         self._border_row = _TMPresetRow(
-            _TILE_BORDER_PRESETS, "", self._on_border_pick, allow_empty=True)
+            _TILE_BORDER_PRESETS, "", self._on_border_pick,
+            allow_empty=True, empty_label="跟随呼吸灯主题色",
+            transparent_value="none", transparent_label="透明（无边框）")
         f_bdr.addWidget(self._border_row, 1)
         tf.addLayout(f_bdr)
 
-        # 背景色：点选预设 + 自定义取色（空点 = 透明）。
+        # 背景色：点选预设 + 自定义取色。空点=透明（默认底色）。
         f_bg = QHBoxLayout()
         f_bg.addWidget(QLabel("背景"))
         self._bg_row = _TMPresetRow(
-            _TILE_BG_PRESETS, "", self._on_bg_pick, allow_empty=True)
+            _TILE_BG_PRESETS, "", self._on_bg_pick,
+            allow_empty=True, empty_label="透明（默认底色）")
         f_bg.addWidget(self._bg_row, 1)
         tf.addLayout(f_bg)
-        # 空点含义提示（斜纹点 = 不单独设色）。_dots 项为 (QFrame, hex) 元组。
-        _bdr_dot, _ = self._border_row._dots[0]
-        _bdr_dot.setToolTip("跟随呼吸灯主题色")
-        _bg_dot, _ = self._bg_row._dots[0]
-        _bg_dot.setToolTip("透明（用磁贴默认底色）")
 
         # 新增磁贴：从「磁贴区块设置」卡移到此处，与「删除磁贴」同组在底部。
         self._add_tile_btn = HintButton("新增磁贴")
@@ -871,8 +872,10 @@ class TileEditPanel(QWidget):
             if self._name_color.itemData(k) == nc:
                 self._name_color.setCurrentIndex(k)
                 break
+        braw = getattr(t, "border_color", "") or ""
+        # 边框特殊值：''=跟随呼吸灯主题色，'none'=透明（无边框）。
         self._border_row.set_current(
-            _rgb_str_to_hex(getattr(t, "border_color", "") or ""))
+            "none" if braw == "none" else _rgb_str_to_hex(braw))
         self._bg_row.set_current(
             _rgb_str_to_hex(getattr(t, "bg_color", "") or ""))
 
@@ -981,10 +984,12 @@ class TileEditPanel(QWidget):
             self.work[self.sel].tile_name_color = self._name_color.currentData() or "255,255,255"
             self._auto_save()
 
-    def _on_border_pick(self, hexv: str) -> None:
-        """点选/自定义取色后写入边框色（hex -> 'R,G,B'，空串=跟随主题）。"""
+    def _on_border_pick(self, token: str) -> None:
+        """点选/自定义取色后写入边框色。token：hex 具体色 / '' 跟随主题 / 'none' 透明无边框。"""
         if 0 <= self.sel < len(self.work):
-            self.work[self.sel].border_color = _hex_to_rgb_str(hexv)
+            # 'none' 是特殊透明标记，不转 hex；其余 hex -> 'R,G,B'（''=跟随主题）。
+            self.work[self.sel].border_color = (
+                "none" if token == "none" else _hex_to_rgb_str(token))
             self._grid.rebuild()
             self._auto_save()
 
@@ -7396,31 +7401,64 @@ class _TMSwitch(QCheckBox):
 
 
 class _TMPresetRow(QWidget):
-    """当前色块 + 一排圆形预设点 + 「自定义」按钮（紧凑单行）。
+    """当前色块 + 横向滚动预设点 + 「自定义」按钮（单行，绝不撑宽窗口）。
 
-    ``on_pick(hex_or_empty)``：点预设 / 自定义取色后回调（hex 不带 #）。
-    ``allow_empty=True`` 时额外给一颗「跟随主题」点（回调空串）。
+    ``on_pick(token)`` 回调：点预设 / 自定义取色后调用。token 为：
+      - 具体色：6 位 hex（不带 #）
+      - ``allow_empty`` 的空点：''（语义由 ``empty_label`` 决定，如边框=跟随主题色）
+      - ``transparent_value`` 非空时额外给一颗「透明」点：回调该值（如边框 'none'）
     """
 
     def __init__(self, presets: list[str], cur: str,
                  on_pick: Callable[[str], None],
                  allow_empty: bool = False,
+                 empty_label: str = "",
+                 transparent_value: str = "",
+                 transparent_label: str = "",
                  parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._on_pick = on_pick
-        self._dots: list[tuple[QFrame, str]] = []
+        # (dot, token, kind) —— kind: 'normal' | 'empty' | 'transparent'
+        self._dots: list[tuple[QFrame, str, str]] = []
+        self._empty_dot: QFrame | None = None
+        self._transparent_dot: QFrame | None = None
+
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
-        row.setSpacing(4)
+        row.setSpacing(6)
+
         self._sw = QFrame()
-        self._sw.setFixedSize(22, 22)
+        self._sw.setFixedSize(18, 18)
         self._sw.setStyleSheet(_tm_swatch_style(cur or "0e1117"))
         row.addWidget(self._sw)
+
+        # 预设区横向滚动：窗口再窄也不撑宽，多余预设点滚动可见。
+        sa = QScrollArea()
+        sa.setFixedHeight(22)
+        sa.setWidgetResizable(True)
+        sa.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        sa.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        sa.setFrameShape(QFrame.Shape.NoFrame)
+        sa.setStyleSheet("QScrollArea { background: transparent; border: none; }")
+        inner = QWidget()
+        drow = QHBoxLayout(inner)
+        drow.setContentsMargins(0, 0, 0, 0)
+        drow.setSpacing(4)
         if allow_empty:
-            row.addWidget(self._make_dot("", cur == ""))
+            self._empty_dot = self._make_dot("", cur == "", "empty")
+            self._empty_dot.setToolTip(empty_label)
+            drow.addWidget(self._empty_dot)
+        if transparent_value:
+            self._transparent_dot = self._make_dot(
+                transparent_value, cur == transparent_value, "transparent")
+            self._transparent_dot.setToolTip(transparent_label)
+            drow.addWidget(self._transparent_dot)
         for hx in presets:
-            row.addWidget(self._make_dot(hx, cur == hx))
-        row.addStretch(1)
+            drow.addWidget(self._make_dot(hx, cur == hx, "normal"))
+        drow.addStretch(1)
+        sa.setWidget(inner)
+        row.addWidget(sa, 1)
+
         custom = QPushButton("自定义")
         custom.setStyleSheet(_tm_btn_style())
         custom.setFixedHeight(22)
@@ -7429,28 +7467,38 @@ class _TMPresetRow(QWidget):
         self._custom_btn = custom
         self.set_current(cur)
 
-    def _make_dot(self, hx: str, selected: bool) -> QFrame:
+    @staticmethod
+    def _dot_style(token: str, selected: bool, kind: str) -> str:
+        if kind == "transparent":
+            # 「透明/无」：斜纹棋盘占位，区别于「跟随主题」斜纹。
+            bg = ("background: repeating-linear-gradient(45deg,"
+                  " #2a2f3a 0 4px, #161a22 4px 8px);")
+            edge = "#7a8696"
+        elif kind == "empty":
+            # 「跟随主题」：灰阶斜纹占位。
+            bg = ("background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
+                  " stop:0 #3a3f4a, stop:0.5 #232834, stop:1 #3a3f4a);")
+            edge = "#5a6b7a"
+        else:
+            bg = f"background-color: #{token};"
+            edge = "transparent"
+        return (f"QFrame {{ {bg} border: 2px solid"
+                f" {'#e8ecf1' if selected else edge};"
+                f" border-radius: 8px; }}")
+
+    def _make_dot(self, token: str, selected: bool, kind: str) -> QFrame:
         d = QFrame()
         d.setFixedSize(16, 16)
         d.setCursor(Qt.CursorShape.PointingHandCursor)
-        if hx:
-            bg = f"background-color: #{hx};"
-        else:
-            # 「跟随主题」：斜纹占位（表示非具体颜色）。
-            bg = ("background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                  " stop:0 #3a3f4a, stop:0.5 #232834, stop:1 #3a3f4a);")
-        d.setStyleSheet(
-            f"QFrame {{ {bg} border: 2px solid"
-            f" {'#e8ecf1' if selected else 'transparent'};"
-            f" border-radius: 8px; }}")
+        d.setStyleSheet(self._dot_style(token, selected, kind))
         d.mousePressEvent = (  # type: ignore[assignment]
-            lambda _e, h=hx: self._choose(h))
-        self._dots.append((d, hx))
+            lambda _e, h=token: self._choose(h))
+        self._dots.append((d, token, kind))
         return d
 
-    def _choose(self, hx: str) -> None:
-        self.set_current(hx)
-        self._on_pick(hx)
+    def _choose(self, token: str) -> None:
+        self.set_current(token)
+        self._on_pick(token)
 
     def _pick_custom(self) -> None:
         dlg = QColorDialog()
@@ -7467,17 +7515,8 @@ class _TMPresetRow(QWidget):
     def set_current(self, hexv: str) -> None:
         self._cur_hex = str(hexv or "")
         self._sw.setStyleSheet(_tm_swatch_style(self._cur_hex or "0e1117"))
-        for d, hx in self._dots:
-            sel = hx == self._cur_hex
-            if hx:
-                bg = f"background-color: #{hx};"
-            else:
-                bg = ("background-color: qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                      " stop:0 #3a3f4a, stop:0.5 #232834, stop:1 #3a3f4a);")
-            d.setStyleSheet(
-                f"QFrame {{ {bg} border: 2px solid"
-                f" {'#e8ecf1' if sel else 'transparent'};"
-                f" border-radius: 8px; }}")
+        for d, token, kind in self._dots:
+            d.setStyleSheet(self._dot_style(token, token == self._cur_hex, kind))
 
     def custom_button(self) -> QPushButton:
         """供手柄导航把「自定义取色」挂进 nav_items。"""

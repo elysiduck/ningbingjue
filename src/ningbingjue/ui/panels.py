@@ -2945,23 +2945,26 @@ class TilePanel(BlockPanel):
         tiles = self.instance.tiles if self.instance else []
         for i, btn in enumerate(self.btns):
             # 边框默认跟随呼吸灯主题色；背景默认用磁贴底色。
-            # 若磁贴单独设置了 border_color / bg_color，则优先用其覆盖。
-            border_col = accent
+            # 若磁贴单独设置了 border_color / bg_color，则优先用其覆盖；
+            # 边框 'none' = 透明（无边框，边框色取背景色，视觉无描边）。
             back_col = TILE_BG
+            border_col = accent
             if i < len(tiles):
                 t = tiles[i]
-                bc = getattr(t, "border_color", "") or ""
-                if bc:
-                    try:
-                        cr, cg, cb = (int(x) for x in bc.split(","))
-                        border_col = Color(cr, cg, cb)
-                    except Exception:
-                        pass
                 bgc = getattr(t, "bg_color", "") or ""
                 if bgc:
                     try:
                         cr, cg, cb = (int(x) for x in bgc.split(","))
                         back_col = Color(cr, cg, cb)
+                    except Exception:
+                        pass
+                bc = getattr(t, "border_color", "") or ""
+                if bc == "none":
+                    border_col = back_col
+                elif bc:
+                    try:
+                        cr, cg, cb = (int(x) for x in bc.split(","))
+                        border_col = Color(cr, cg, cb)
                     except Exception:
                         pass
             btn.set_colors(
