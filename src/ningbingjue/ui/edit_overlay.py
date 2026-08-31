@@ -36,7 +36,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 
 from PyQt6.QtCore import (Qt, QTimer, pyqtSignal, QPoint, QRect, QRectF, QSize,
-                          QThread, QEvent, QPropertyAnimation, QEasingCurve)
+                          QThread, QEvent, QPropertyAnimation, QEasingCurve,
+                          QObject)
 from PyQt6.QtGui import (
     QColor,
     QFont,
@@ -4241,48 +4242,238 @@ from ._pagination import (
 
 # ---------------------------------------------------------------------------
 # 重启子进程拉起（布局编辑「↻ 重启」与 DevSync「拉取源码并重启」共用）。
+#
+# 2026-09-01 重写（掌机「拉取源码并重启 = 卡住 / 起不来」专项）：
+#   1. 旧实现在主线程 ``time.sleep(1.0)`` 干等 → 事件循环停摆 1 秒，窗口不刷新；
+#      而且只有 1 秒观察窗口：掌机冷启动要过 PyQt6 + 一堆 DLL 的载入，常常还没
+#      撑到窗口出现就被判「已退出」，或反过来撑过 1 秒后晚一步崩掉，于是要么
+#      拒绝自杀（用户看到「点了没反应」），要么旧进程退出后新进程才崩（程序消失）。
+#      现改为 ``_RestartWatcher`` 用 QTimer 每 250ms 轮询、最长 8 秒，全程不阻塞，
+#      期间 UI 可以照常刷新「正在重启…」。
+#   2. 子进程 stdout/stderr 原先被丢弃：启动失败时掌机上没有任何现场信息，只能靠猜。
+#      现统一落盘 logs/restart_child.log（含完整 traceback）。
+#   3. Windows 下加 DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP：子进程独立进程组，
+#      旧进程随后退出/崩溃都不会把它连带带走，也不与父进程共享控制台句柄。
+#
+# 修复历史（2026-08-30）：旧实现 ``Popen([sys.executable] + sys.argv[1:])``
+# 在源码模式下丢掉了 run.py —— launch.bat 以 ``python run.py --gui`` 启动时
+# ``sys.argv = ['run.py', '--gui']``，拼接结果是 ``python.exe --gui``，
+# Python 收到未知选项立即退出；随后旧进程 ``sys.exit(0)`` 自杀 →
+# 「点重启 = 整个程序消失」。frozen exe 模式 sys.executable 即本体、
+# 不需要脚本参数，原拼接恰好成立，故 bug 只打源码启动路径。
 # ---------------------------------------------------------------------------
-def _spawn_restart_child() -> Optional[str]:
-    """用与当前实例一致的方式拉起重启子进程，并验证其真的活了下来。
+def _restart_child_log_path() -> str:
+    """重启子进程的 stdout/stderr 落盘位置（掌机排查「起不来」的唯一线索）。
 
-    返回 None  = 子进程已起来且 1s 后仍存活（调用方应尽快干净退出当前实例）；
-    返回 str   = 失败原因（调用方必须保持当前实例运行并提示用户，绝不自杀）。
-
-    修复历史（2026-08-30）：旧实现 ``Popen([sys.executable] + sys.argv[1:])``
-    在源码模式下丢掉了 run.py —— launch.bat 以 ``python run.py --gui`` 启动时
-    ``sys.argv = ['run.py', '--gui']``，拼接结果是 ``python.exe --gui``，
-    Python 收到未知选项立即退出；随后旧进程 ``sys.exit(0)`` 自杀 →
-    「点重启 = 整个程序消失」。frozen exe 模式 sys.executable 即本体、
-    不需要脚本参数，原拼接恰好成立，故 bug 只打源码启动路径。
+    返回空串 = logs 目录不可用，调用方退化为 DEVNULL。
     """
+    try:
+        logs = os.path.join(_devsync_base_dir(), "logs")
+        os.makedirs(logs, exist_ok=True)
+        return os.path.join(logs, "restart_child.log")
+    except Exception:  # noqa: BLE001
+        return ""
+
+
+def _build_restart_cmd() -> "tuple[Optional[list[str]], Optional[str]]":
+    """构造重启命令行，并保证一定带 ``--gui``。返回 ``(cmd, err)``。
+
+    **为什么必须强制 ``--gui``**（2026-09-01 补回，此前被弄丢过一次）：
+    ``run.main()`` 只在 argv 里有 ``--gui`` 时才进 GUI，否则跑 headless 引擎
+    自检——跑完正常退出。所以重启命令一旦漏掉 ``--gui``，新进程会在几秒内
+    「正常退出」，而旧进程那时往往已经 quit 了，用户看到的就是「点了重启，
+    程序直接没了」——正是掌机上「无法重启」的经典表现。frozen_launcher 虽然
+    在启动时会补 ``--gui``，但 ``--headless`` 分支只做删除、不补，原样透传
+    argv 就会漏掉它。
+    """
+    rest = [a for a in sys.argv[1:] if a != "--headless"]
+    if "--gui" not in rest:
+        rest = ["--gui"] + rest
     if getattr(sys, "frozen", False):
-        # 冻结 exe：sys.executable 就是程序本体，透传原 argv 其余部分。
-        cmd = [sys.executable] + sys.argv[1:]
-    else:
-        # 源码模式：sys.executable 是 python.exe，必须补 run.py 脚本路径。
-        # 本文件位于 <项目根>/src/ningbingjue/ui/ → 目录上跳 3 级 = 项目根。
-        here = os.path.dirname(os.path.abspath(__file__))
-        root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
-        run_py = os.path.join(root, "run.py")
-        if not os.path.isfile(run_py):
-            run_py = os.path.join(os.getcwd(), "run.py")
-        if not os.path.isfile(run_py):
-            return ("源码模式启动但找不到 run.py（试过 " + root +
-                    " 与当前目录），无法自动重启；请手动重新运行 launch.bat")
-        cmd = [sys.executable, run_py] + sys.argv[1:]
+        # 冻结 exe：sys.executable 就是程序本体，不要拼脚本路径（否则 argparse
+        # 收到多余位置参数直接退出）。
+        return [sys.executable] + rest, None
+    # 源码模式：sys.executable 是 python.exe，必须补 run.py 脚本路径。
+    # 本文件位于 <项目根>/src/ningbingjue/ui/ → 目录上跳 3 级 = 项目根。
+    here = os.path.dirname(os.path.abspath(__file__))
+    root = os.path.dirname(os.path.dirname(os.path.dirname(here)))
+    run_py = os.path.join(root, "run.py")
+    if not os.path.isfile(run_py):
+        run_py = os.path.join(os.getcwd(), "run.py")
+    if not os.path.isfile(run_py):
+        return None, ("源码模式启动但找不到 run.py（试过 " + root +
+                      " 与当前目录），无法自动重启；请手动重新运行 launch.bat")
+    return [sys.executable, run_py] + rest, None
+
+
+def _spawn_restart_child_proc() -> "tuple[Any, Optional[str]]":
+    """拉起重启子进程并**立即返回**（不等待）。返回 ``(proc, err)``。
+
+    等待/存活验证交给 :class:`_RestartWatcher` 异步做，避免阻塞 Qt 主线程。
+    """
+    cmd, err = _build_restart_cmd()
+    if err:
+        return None, err
     env = dict(os.environ)
     # 让 run.py 单实例互斥放行：旧进程尚未退出仍持有互斥，新进程必须先起来。
     env["NINGBING_RESTART"] = "1"
+
+    log_path = _restart_child_log_path()
+    fh = None
+    if log_path:
+        try:
+            fh = open(log_path, "a", encoding="utf-8", errors="replace")
+            fh.write("\n===== restart child %s =====\ncmd=%r\ncwd=%r\n"
+                     % (time.strftime("%m-%d %H:%M:%S"), cmd, os.getcwd()))
+            fh.flush()
+        except Exception:  # noqa: BLE001 - 日志不可用就退化，不影响拉起
+            fh = None
+    flags = 0
+    if os.name == "nt":
+        # CREATE_NEW_PROCESS_GROUP：独立进程组，旧进程退出/崩溃不牵连新进程。
+        # DETACHED_PROCESS：不继承父进程的控制台。
+        # CREATE_NO_WINDOW：源码模式（python.exe run.py --gui）若不显式禁窗口，
+        #   重启会闪一个黑控制台——掌机上看着就像「程序崩了一下」。
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+                 | getattr(subprocess, "CREATE_NO_WINDOW", 0))
     try:
-        proc = subprocess.Popen(cmd, env=env, cwd=os.getcwd())
+        proc = subprocess.Popen(
+            cmd, env=env, cwd=os.getcwd(),
+            stdin=subprocess.DEVNULL,
+            stdout=(fh if fh is not None else subprocess.DEVNULL),
+            stderr=(subprocess.STDOUT if fh is not None else subprocess.DEVNULL),
+            creationflags=flags, close_fds=True,
+        )
     except Exception as exc:  # noqa: BLE001
-        return "拉起重启子进程失败：" + str(exc)
-    # 1s 存活验证：坏命令行（如旧 bug 的 ``python --gui``）会在 100ms 内退出；
-    # 而正常启动要过 PyQt 导入 + QApplication 创建（>1s），1s 时仍活着即成功。
-    time.sleep(1.0)
-    if proc.poll() is not None:
-        return ("重启子进程启动后立即退出（rc=" + str(proc.returncode) +
-                "），已保持当前实例运行")
+        # 最后退路：Popen 拉不起（CreateProcess 失败 / 被杀软拦截 / 权限问题）
+        # 时退回「原地 execl 替换当前进程」——这是 Popen 版之前的原始做法，
+        # 作为兜底保留（tests/test_restart.py 锁着这条契约）。
+        # 语义：execl 成功则**永不返回**（进程镜像被替换）；失败必抛异常。
+        # 所以能执行到下面一行，只可能是测试替身返回了。
+        _devsync_log("[restart] Popen 失败，退回 execl：" + repr(exc))
+        try:
+            os.execl(cmd[0], *cmd)
+        except Exception:  # noqa: BLE001
+            return None, "拉起重启子进程失败：" + str(exc)
+        return None, None  # execl 已接管，无子进程对象可验证
+    finally:
+        # 子进程已 dup 走句柄，父进程这边可以立刻关。
+        if fh is not None:
+            try:
+                fh.close()
+            except Exception:  # noqa: BLE001
+                pass
+    # pid 用 getattr 取：日志只是旁证，绝不能因为取不到 pid 就把整个重启流程打断。
+    _devsync_log("[restart] spawned pid=" + str(getattr(proc, "pid", "?"))
+                 + " cmd=" + repr(cmd))
+    return proc, None
+
+
+class _RestartWatcher(QObject):
+    """异步确认重启子进程真的活下来：每 250ms 轮询一次，最长 8 秒。
+
+    全程不阻塞 Qt 主线程，UI 可继续刷新「正在重启…」文案；观察窗口从 1 秒
+    放宽到 8 秒，掌机冷启动再慢也不会被误判成「秒退」。
+    """
+
+    succeeded = pyqtSignal()
+    failed = pyqtSignal(str)
+
+    TICK_MS = 250
+    GRACE_S = 8.0
+
+    def __init__(self, proc: Any, parent: Any = None) -> None:
+        super().__init__(parent)
+        self._proc = proc
+        self._elapsed = 0.0
+        self._done = False
+        self._timer = QTimer(self)
+        self._timer.setInterval(self.TICK_MS)
+        self._timer.timeout.connect(self._on_tick)
+
+    def start(self) -> None:
+        self._timer.start()
+
+    def _on_tick(self) -> None:
+        if self._done:
+            return
+        self._elapsed += self.TICK_MS / 1000.0
+        rc = self._proc.poll()
+        if rc is not None:
+            self._finish(False, self._explain(rc))
+            return
+        if self._elapsed >= self.GRACE_S:
+            self._finish(True, "")
+
+    def _explain(self, rc: Optional[int]) -> str:
+        msg = ("重启子进程启动后 %.1fs 就退出了（rc=%s），已保持当前实例运行。"
+               % (self._elapsed, rc))
+        if rc == 0:
+            msg += ("\n\nrc=0 多半是「提权跳板」：子进程发现自己不是管理员，用 runas "
+                    "另起一个提权副本后就正常退出，这里看到的其实是跳板的退出码。"
+                    "请用 launch.bat（它已经提权）或直接双击 exe 启动。")
+        msg += "\n\n完整启动输出见 logs/restart_child.log"
+        return msg
+
+    def _finish(self, ok: bool, msg: str) -> None:
+        self._done = True
+        try:
+            self._timer.stop()
+        except Exception:  # noqa: BLE001
+            pass
+        if ok:
+            _devsync_log("[restart] 子进程存活确认（%.1fs）" % self._elapsed)
+            self.succeeded.emit()
+        else:
+            _devsync_log("[restart] 子进程退出：" + msg.replace("\n", " "))
+            self.failed.emit(msg)
+
+
+def _start_async_restart(parent: Any, on_ok: Callable,
+                         on_fail: Callable) -> Optional["_RestartWatcher"]:
+    """GUI 统一入口：拉起重启子进程 + 异步存活验证 + 成功/失败回调。
+
+    返回 watcher（调用方务必保存引用防 GC），拉起阶段即失败时返回 None
+    并直接调用 ``on_fail``。
+    """
+    proc, err = _spawn_restart_child_proc()
+    if err:
+        on_fail(err)
+        return None
+    if proc is None:
+        # execl 路径：进程镜像已被替换，没有子进程对象可验证，直接算接管成功。
+        on_ok()
+        return None
+    # parent 只有确实是 QObject 才能传给 watcher（QObject 的父参不接受别的
+    # 类型，传错会抛 TypeError 把整条重启链路打断）。watcher 的生命周期由
+    # 调用方保存的引用保证，不依赖 Qt 父子关系。
+    w = _RestartWatcher(proc, parent if isinstance(parent, QObject) else None)
+    w.succeeded.connect(on_ok)
+    w.failed.connect(on_fail)
+    w.start()
+    return w
+
+
+def _spawn_restart_child() -> Optional[str]:
+    """同步版：拉起并轮询等待（最长 GRACE_S 秒）。
+
+    返回 None = 子进程存活；返回 str = 失败原因（调用方保持运行）。
+    **仅保留给离线脚本 / 测试调用**——它会阻塞调用方，GUI 路径一律用
+    :func:`_start_async_restart`，否则主线程会被 sleep 冻住。
+    """
+    proc, err = _spawn_restart_child_proc()
+    if err:
+        return err
+    if proc is None:
+        return None  # execl 已接管
+    deadline = time.monotonic() + _RestartWatcher.GRACE_S
+    while time.monotonic() < deadline:
+        rc = proc.poll()
+        if rc is not None:
+            return ("重启子进程启动后立即退出（rc=" + str(rc) +
+                    "），已保持当前实例运行")
+        time.sleep(_RestartWatcher.TICK_MS / 1000.0)
     return None
 
 
@@ -4324,6 +4515,8 @@ class LayoutEditPanel(QWidget):
         )
         self._app = app
         self._overlay = overlay
+        # 重启观察器（QTimer 轮询）必须存住引用，局部变量被 GC 后轮询会停摆。
+        self._restart_watcher: Optional["_RestartWatcher"] = None
 
         root = QVBoxLayout(self)
         root.setSpacing(4)
@@ -5298,33 +5491,58 @@ class LayoutEditPanel(QWidget):
         某些状态下会被静默吞掉）。现流程（2026-08-30 修，与 DevSync 共用）：
 
         1. 先 ``save_all()`` 落盘当前布局，避免重启把正在编辑的布局弄丢；
-        2. 通过 ``_spawn_restart_child()`` 拉起新进程（frozen exe 下
+        2. 通过 ``_start_async_restart()`` 拉起新进程（frozen exe 下
            ``sys.executable`` 即本体；源码模式补 run.py 绝对路径——旧实现
            丢掉 run.py 导致 ``python --gui`` 秒退 + 旧进程自杀 = 点重启整个
-           程序消失）并验证子进程 1s 后仍存活；
+           程序消失），并用 QTimer 轮询（最长 8s）异步验证子进程存活，
+           **不阻塞主线程**（旧版在主线程 sleep 1s，既冻 UI 又容易误判）；
         3. 子进程存活后走 ``_quit_after_restart()`` → 主窗口 ``_quit_app()``
            干净退出（save_all + close + quit + aboutToQuit 收尾），旧进程
            释放 ryzenadj 等互斥/句柄，新进程正常接管，无崩溃-重启竞态；
         4. 任一步失败 → 弹窗说明原因，当前实例**保持运行**，绝不再出现
            「程序关了却没重启起来」。
         """
+        if getattr(self, "_restart_watcher", None) is not None:
+            return  # 已在重启流程中，防连点
         # 1) 先落盘，避免重启丢失正在编辑的布局。
         try:
             self._app.save_all()
         except Exception:  # noqa: BLE001 - 退出阶段不应因保存失败阻断重启
             pass
+        # 收起编辑面板：新实例起来后不该还停留在编辑态（tests/test_restart.py
+        # 的 test_restart_persists_and_hides_editor 锁着这条契约）。
+        try:
+            self._overlay.close_requested.emit()
+        except Exception:  # noqa: BLE001
+            pass
 
-        # 2) 拉起新进程并验证存活；失败保持当前实例运行。
-        err = _spawn_restart_child()
-        if err:
-            try:
-                QMessageBox.warning(self, "重启失败", err)
-            except Exception:  # noqa: BLE001
-                pass
-            return
+        # 2) 拉起新进程并异步验证存活；失败保持当前实例运行。
+        try:
+            self._restart_btn.setEnabled(False)
+            self._restart_btn.setText("重启中…")
+        except Exception:  # noqa: BLE001
+            pass
+        self._restart_watcher = _start_async_restart(
+            self,
+            on_ok=self._on_restart_ok,
+            on_fail=self._on_restart_failed,
+        )
 
-        # 3) 子进程已确认接管，干净退出当前实例。
+    def _on_restart_ok(self) -> None:
+        """子进程已确认接管 → 干净退出当前实例。"""
         _quit_after_restart(self._app)
+
+    def _on_restart_failed(self, msg: str) -> None:
+        self._restart_watcher = None
+        try:
+            self._restart_btn.setEnabled(True)
+            self._restart_btn.setText("↻ 重启")
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            QMessageBox.warning(self, "重启失败", msg)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 
@@ -9265,12 +9483,47 @@ class LSEditPanel(QWidget):
 
 
 # -- 开发同步（调试）面板辅助函数 ------------------------------------------
+def _devsync_base_dir(fallback: str = "") -> str:
+    """日志/配置的基目录：冻结=exe 目录；开发=含 run.py 的项目根。"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    d = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(5):
+        if (os.path.isfile(os.path.join(d, "run.py"))
+                and os.path.isdir(os.path.join(d, "src"))):
+            return d
+        nd = os.path.dirname(d)
+        if nd == d:
+            break
+        d = nd
+    return fallback or d
+
+
+def _devsync_log(msg: str) -> None:
+    """把开发同步每一步写 logs/devsync.log。
+
+    掌机上「点了没反应 / 卡住 / 起不来」全靠这份日志定位：改前整个拉取流程
+    跑在 Qt 主线程，卡住时既没有 UI 反馈也没有任何落盘痕迹，事后无从查证。
+    """
+    try:
+        logs = os.path.join(_devsync_base_dir(), "logs")
+        os.makedirs(logs, exist_ok=True)
+        with open(os.path.join(logs, "devsync.log"), "a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%m-%d %H:%M:%S") + " " + msg + "\n")
+    except Exception:  # noqa: BLE001 - 日志失败绝不能影响主流程
+        pass
+
+
 def _devsync_robocopy(src: str, dst: str, extra: list[str]) -> int:
     """调用 robocopy；返回退出码（< 8 视为成功）。失败返回 16。
 
     带超时保护：robocopy 在网络共享异常/目标被锁定时可能无限挂起，而本函数
     跑在 devsync 后台线程，无 timeout 会永久阻塞该线程。故改用 Popen +
     wait(timeout=120)，超时后强制回收子进程（含其可能派生的 robocopy 子树）。
+
+    注意（2026-09-01）：本函数**只能**由 _DevSyncPullWorker 在工作线程里调用。
+    它同步阻塞调用方，绝不可从 Qt 主线程（按钮槽）直接调用——那会让事件循环
+    停摆、窗口被 Windows 标记「无响应」。
     """
     try:
         cmd = ["robocopy", src, dst] + list(extra)
@@ -9292,8 +9545,25 @@ def _devsync_robocopy(src: str, dst: str, extra: list[str]) -> int:
 
 
 def _devsync_compile_check(folder: str) -> list[str]:
-    """递归 py_compile 校验；返回编译失败的文件列表（空 = 全部通过）。"""
-    import py_compile
+    """递归编译校验；返回编译失败的文件列表（空 = 全部通过）。
+
+    ⚠️ 2026-09-01 重写（掌机「拉取后起不来」的 P0 根因）：
+    旧实现是 ``py_compile.compile(fp, doraise=True, quiet=2)``，而 CPython 里
+    ``quiet >= 2`` 的语义恰恰是「**静默吞掉一切错误：不打印、不抛异常、也不
+    返回失败**」。实测 Python 3.13：把内容为 ``def (:`` 的文件传进去，调用
+    正常返回，``bad`` 恒为空列表——这道「坏同步不锁死掌机」的防线从来没生效过。
+    后果链条：
+      * 拉取侧放行 → 坏源码照样原子切换进 ``_ext/src``；
+      * 启动侧 ``run.py`` 用了同样的 ``quiet=2``（见 _apply_external_src_override），
+        校验同样恒通过 → 坏源码被插到 ``sys.path`` 最前；
+      * 新进程 import 即崩 → 起不来；而磁盘上的 ``_ext/src`` 已经是坏版本，
+        之后每次重启都起不来 = 掌机被自己的同步流程锁死。
+    现改为内置 ``compile()``：语法错直接抛 SyntaxError，而且**不落 .pyc**
+    （py_compile 会往目录里写 ``__pycache__``，污染这个马上要做原子切换的
+    临时目录）。用 ``tokenize.open`` 读取以正确处理 BOM 与
+    ``# -*- coding: gbk -*-`` 编码声明。
+    """
+    import tokenize
 
     bad: list[str] = []
     for root, dirs, files in os.walk(folder):
@@ -9302,10 +9572,169 @@ def _devsync_compile_check(folder: str) -> list[str]:
             if fn.endswith(".py"):
                 fp = os.path.join(root, fn)
                 try:
-                    py_compile.compile(fp, doraise=True, quiet=2)
-                except Exception:  # noqa: BLE001
+                    with tokenize.open(fp) as fh:
+                        src = fh.read()
+                    compile(src, fp, "exec")
+                except Exception as exc:  # noqa: BLE001
+                    _devsync_log("[compile] 失败 " + fp + "：" + repr(exc))
                     bad.append(fp)
     return bad
+
+
+class _DevSyncPullWorker(QThread):
+    """后台执行「拉取源码」三阶段：连通性预检 → robocopy → 编译校验 → 原子切换。
+
+    为什么必须放后台线程（2026-09-01 修，掌机「点拉取并重启 = 直接卡住」根因）：
+    改前 ``DevSyncEditPanel._on_pull_restart`` 是按钮槽函数，全程在 Qt 主线程
+    里同步跑完 robocopy（SMB 共享，src 约 21MB / 842 文件，掌机 WiFi 上数十秒，
+    最坏 120s 超时）+ 全量 py_compile（96 个 .py）+ rmtree/rename。这段时间
+    Qt 事件循环完全停摆：窗口不重绘、不响应手柄/键盘，Windows 直接把标题栏
+    标成「无响应」——用户看到的就是「点一下就卡死」；很多人会顺手强制结束进程，
+    于是重启永远不发生，表现为「无法重启」。讽刺的是 ``_devsync_robocopy``
+    的 docstring 早就写着「本函数跑在 devsync 后台线程」，而实际并不存在这个
+    后台线程，注释与实现长期背离。
+
+    信号（全部跨线程回主线程，主线程只做 setText，零阻塞）：
+      * ``progress(str)``    — 阶段文案
+      * ``swapped(str)``     — 切换完成，参数=新的本地 src 路径（调用方续重启）
+      * ``failed(str)``      — 失败原因（调用方恢复 UI 并提示，绝不退出程序）
+    """
+
+    progress = pyqtSignal(str)
+    swapped = pyqtSignal(str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, share: str, share_src: str, dst: str,
+                 parent: Any = None) -> None:
+        super().__init__(parent)
+        self._share = share
+        self._share_src = share_src
+        self._dst = dst
+        self._tmp = dst + ".tmp"
+        self._old = dst + ".bak"
+
+    # -- 三阶段 ---------------------------------------------------------
+    def run(self) -> None:  # pragma: no cover - 依赖网络/文件系统
+        try:
+            self._run_inner()
+        except Exception as exc:  # noqa: BLE001 - 兜底：异常也要回 UI，不能静默
+            _devsync_log("[pull] 未预期异常：" + repr(exc))
+            self.failed.emit("拉取异常：" + repr(exc))
+
+    def _run_inner(self) -> None:
+        _devsync_log("[pull] start share=" + self._share_src +
+                     " dst=" + self._dst)
+        # 0) 连通性预检：共享不可达时 robocopy 会拖满 120s 超时才报错，
+        #    先用 5s 探活快速失败，省掉两分钟的干等。
+        self.progress.emit("正在检查笔记本共享…")
+        if not _devsync_probe_nbj(self._share, 5.0):
+            self.failed.emit("笔记本共享不可达：" + self._share +
+                             "（确认笔记本开机、已开共享、掌机与它同一局域网）")
+            return
+
+        # 1) 拷到临时目录（不直接覆盖正在用的 _ext/src）
+        self.progress.emit("正在拉取源码（robocopy，可能要几十秒）…")
+        if os.path.isdir(self._tmp):
+            shutil.rmtree(self._tmp, ignore_errors=True)
+        t0 = time.monotonic()
+        rc = _devsync_robocopy(self._share_src, self._tmp,
+                               ["/MIR", "/XD", "__pycache__"])
+        _devsync_log("[pull] robocopy rc=" + str(rc) +
+                     " cost=%.1fs" % (time.monotonic() - t0))
+        if rc >= 8:
+            self.failed.emit("拉取失败（robocopy 返回 " + str(rc) +
+                             "；rc>=8 表示有文件没拷成功，详见 logs/devsync.log）")
+            return
+
+        # 2) 编译校验（决策 1：坏同步不锁死掌机）
+        self.progress.emit("正在编译校验新源码…")
+        bad = _devsync_compile_check(self._tmp)
+        _devsync_log("[pull] compile bad=" + str(len(bad)))
+        if bad:
+            _devsync_log("[pull] first bad: " + str(bad[:3]))
+            shutil.rmtree(self._tmp, ignore_errors=True)
+            self.failed.emit(
+                "编译失败 " + str(len(bad)) + " 个文件，已放弃切换"
+                "（当前版本未被破坏）。首个失败：" + os.path.basename(bad[0]))
+            return
+
+        # 3) 原子切换：旧版备份 → 新版就位；任一步失败都要能回到旧版。
+        self.progress.emit("正在切换源码目录…")
+        if os.path.isdir(self._old):
+            shutil.rmtree(self._old, ignore_errors=True)
+        if os.path.isdir(self._dst):
+            try:
+                os.rename(self._dst, self._old)
+            except Exception as exc:  # noqa: BLE001
+                # 目录被占用（进程 cwd 在其内部 / 杀软扫描 / 文件被锁）时
+                # rename 会失败。此时 dst 原封不动，直接放弃切换即可，
+                # 绝不能把 tmp 硬塞进去造成半新半旧。
+                _devsync_log("[pull] rename dst->old 失败：" + repr(exc))
+                shutil.rmtree(self._tmp, ignore_errors=True)
+                self.failed.emit(
+                    "无法备份当前源码目录（可能被占用）：" + repr(exc) +
+                    "。已保持当前版本不变。")
+                return
+        try:
+            os.rename(self._tmp, self._dst)
+        except Exception as exc:  # noqa: BLE001
+            # 回滚：把旧版搬回去，保证 _ext/src 始终是一个完整可用的版本。
+            _devsync_log("[pull] rename tmp->dst 失败，回滚：" + repr(exc))
+            if not os.path.isdir(self._dst) and os.path.isdir(self._old):
+                try:
+                    os.rename(self._old, self._dst)
+                except Exception:  # noqa: BLE001
+                    pass
+            shutil.rmtree(self._tmp, ignore_errors=True)
+            self.failed.emit(
+                "切换新源码失败，已回滚到旧版本：" + repr(exc))
+            return
+
+        _devsync_log("[pull] swapped ok -> " + self._dst)
+        self._write_swap_marker()
+        self.progress.emit("源码已更新，正在重启…")
+        self.swapped.emit(self._dst)
+
+    def _write_swap_marker(self) -> None:
+        """写「切换待确认」哨兵（约定与 ``run.py:_ext_src_self_heal`` 成对）。
+
+        新实例 GUI 起来后会删掉它（``run_gui`` → ``_clear_ext_src_swap_pending``）。
+        若下次启动它还在且已过期，说明这次切换后的新进程根本没活下来（能编译
+        但 import 即崩之类），run.py 会自动把 ``.bak`` 换回来——这是「坏同步
+        不锁死掌机」的最后一道闸：没有它，一次坏同步就能让掌机再也起不来，
+        而用户此时已经打不开面板去重新拉代码了。
+        """
+        try:
+            parent = os.path.dirname(self._dst) or "."
+            os.makedirs(parent, exist_ok=True)
+            with open(os.path.join(parent, "src.swap_pending.json"),
+                      "w", encoding="utf-8") as fh:
+                json.dump({"ts": time.time(), "src": self._dst,
+                           "bak": self._old}, fh)
+        except Exception:  # noqa: BLE001 - 哨兵写失败不该阻断切换流程
+            pass
+
+
+class _DevSyncTaskWorker(QThread):
+    """通用后台任务：把同步阻塞的脏活（robocopy / rmtree）挪出主线程。
+
+    「上传日志」原先也和拉取一样，在按钮槽里直接跑 robocopy —— 走 SMB 上传
+    整个 logs 目录最坏要 120s 超时，同样会把窗口卡成「无响应」。
+    """
+
+    done = pyqtSignal(int)      # 任务返回值（robocopy 退出码）
+    failed = pyqtSignal(str)    # 任务抛异常
+
+    def __init__(self, fn: Callable[[], int], parent: Any = None) -> None:
+        super().__init__(parent)
+        self._fn = fn
+
+    def run(self) -> None:  # pragma: no cover - 依赖网络/文件系统
+        try:
+            self.done.emit(int(self._fn()))
+        except Exception as exc:  # noqa: BLE001
+            _devsync_log("[task] 异常：" + repr(exc))
+            self.failed.emit(str(exc))
 
 
 def _devsync_probe_nbj(share: str, timeout: float = 2.0) -> bool:
@@ -9382,6 +9811,13 @@ class DevSyncEditPanel(QWidget):
         self._overlay = overlay
         self._base = self._resolve_base()
         self._scan_thread: Optional["_DevSyncLanScan"] = None
+        # 拉取 worker（后台线程）与重启观察器（QTimer 轮询）都要**存住引用**：
+        # 局部变量会被 GC，QThread 被回收等于线程被强拆，QTimer 被回收则轮询
+        # 直接停摆——表现为「点了按钮后再也没动静」。
+        self._pull_worker: Optional["_DevSyncPullWorker"] = None
+        self._upload_worker: Optional["_DevSyncTaskWorker"] = None
+        self._restart_watcher: Optional["_RestartWatcher"] = None
+        self._upload_dst: str = ""
 
         root = QVBoxLayout(self)
         root.setSpacing(10)
@@ -9470,19 +9906,11 @@ class DevSyncEditPanel(QWidget):
     # -- 路径解析 ---------------------------------------------------------
     @staticmethod
     def _resolve_base() -> str:
-        """配置/外部源码所在基目录：冻结=exe 目录；开发=含 run.py 的项目根。"""
-        if getattr(sys, "frozen", False):
-            return os.path.dirname(os.path.abspath(sys.executable))
-        d = os.path.dirname(os.path.abspath(__file__))
-        for _ in range(5):
-            if (os.path.isfile(os.path.join(d, "run.py"))
-                    and os.path.isdir(os.path.join(d, "src"))):
-                return d
-            nd = os.path.dirname(d)
-            if nd == d:
-                break
-            d = nd
-        return d
+        """配置/外部源码所在基目录：冻结=exe 目录；开发=含 run.py 的项目根。
+
+        与模块级 ``_devsync_base_dir()`` 同一套逻辑，委托过去避免两处漂移。
+        """
+        return _devsync_base_dir()
 
     def _cfg_path(self) -> str:
         return os.path.join(self._base, "sync_config.json")
@@ -9548,7 +9976,24 @@ class DevSyncEditPanel(QWidget):
             return
         self._on_pull_restart()
 
+    def _set_busy(self, busy: bool) -> None:
+        """拉取/重启期间禁用所有按钮：防连点，也让用户看清「正在忙」。"""
+        for _b in (self._pull_btn, self._upload_btn, self._scan_btn,
+                   self._save_btn, self._test_btn, self._close_btn):
+            try:
+                _b.setEnabled(not busy)
+            except Exception:  # noqa: BLE001
+                pass
+
     def _on_pull_restart(self) -> None:
+        """启动后台拉取（robocopy → 编译校验 → 原子切换 → 重启）。
+
+        2026-09-01：整段搬进 ``_DevSyncPullWorker``。改前这些步骤全在 Qt 主线程
+        同步跑：robocopy 走 SMB 拉 21MB / 842 个文件（掌机 WiFi 数十秒，最坏
+        120s 超时）+ 全量 py_compile（96 个 .py）+ rmtree/rename——期间事件循环
+        停摆、窗口不重绘、不响应手柄键盘，Windows 直接标「无响应」，这就是掌机上
+        「点一下就卡住、然后重启不了」的根因。
+        """
         cfg = self._load_cfg()
         share = self._share_edit.text().strip() or cfg.get("laptop_share", "")
         if not share:
@@ -9559,46 +10004,65 @@ class DevSyncEditPanel(QWidget):
         if not os.path.isdir(src):
             self._set_status("❌ 笔记本共享下找不到 src 目录：" + src, False)
             return
-        # 1) 先拷到临时目录（不直接覆盖正在用的 _ext/src）
-        tmp = dst + ".tmp"
-        if os.path.isdir(tmp):
-            shutil.rmtree(tmp, ignore_errors=True)
-        rc = _devsync_robocopy(src, tmp, ["/MIR", "/XD", "__pycache__"])
-        if rc >= 8:
-            self._set_status("❌ 拉取失败（robocopy 返回 " + str(rc) + "）", False)
-            return
-        # 2) 编译校验（决策 1：坏同步不锁死掌机）
-        bad = _devsync_compile_check(tmp)
-        if bad:
-            self._set_status(
-                "❌ 编译失败 " + str(len(bad)) + " 个文件，已放弃切换"
-                "（当前版本未被破坏）", False)
-            shutil.rmtree(tmp, ignore_errors=True)
-            return
-        # 3) 原子切换：旧版备份、新版就位
-        old = dst + ".bak"
-        if os.path.isdir(old):
-            shutil.rmtree(old, ignore_errors=True)
-        if os.path.isdir(dst):
-            try:
-                os.rename(dst, old)
-            except Exception:  # noqa: BLE001
-                shutil.move(dst, old)
-        os.rename(tmp, dst)
-        self._set_status("✅ 源码已更新，正在重启加载新版本…", True)
-        # 提权重生 exe（当前进程已是管理员，子进程继承 ring0 权限）
-        QTimer.singleShot(400, self._relaunch)
+        if self._pull_worker is not None and self._pull_worker.isRunning():
+            return  # 正在拉，防重复点击
+        self._set_busy(True)
+        self._pull_worker = _DevSyncPullWorker(share, src, dst, self)
+        self._pull_worker.progress.connect(self._on_pull_progress)
+        self._pull_worker.swapped.connect(self._on_pull_swapped)
+        self._pull_worker.failed.connect(self._on_pull_failed)
+        self._pull_worker.finished.connect(self._on_pull_finished)
+        self._pull_worker.start()
+
+    def _on_pull_progress(self, msg: str) -> None:
+        self._set_status("⏳ " + msg, True)
+
+    def _on_pull_failed(self, msg: str) -> None:
+        self._set_status("❌ " + msg, False)
+        self._set_busy(False)
+
+    def _on_pull_finished(self) -> None:
+        self._pull_worker = None
+        # 成功分支不恢复按钮：马上就要退出当前实例，恢复反而引诱用户点。
+
+    def _on_pull_swapped(self, dst: str) -> None:
+        """源码切换完成 → 记住共享路径 → 起新进程加载新源码。"""
+        # 顺手把共享路径写进配置，下次打开不用再填。
+        try:
+            cfg = self._load_cfg()
+            cfg["laptop_share"] = (self._share_edit.text().strip()
+                                   or cfg.get("laptop_share", ""))
+            self._save_cfg(cfg)
+        except Exception:  # noqa: BLE001 - 存配置失败不该阻断重启
+            pass
+        self._set_status("✅ 源码已更新（" + dst + "），正在重启加载新版本…", True)
+        # 留一帧让上面这句先画出来，再拉子进程（子进程起来后本进程就该退了）。
+        QTimer.singleShot(300, self._relaunch)
 
     def _relaunch(self) -> None:
-        """拉起重启子进程并干净退出（2026-08-30 与布局编辑「↻ 重启」共用
-        _spawn_restart_child / _quit_after_restart：源码模式下旧实现丢掉
-        run.py 导致 python --gui 秒退 + 旧进程自杀；且不做存活验证）。
+        """异步拉起重启子进程，确认存活后才退出当前实例。
+
+        用 ``_start_async_restart``（QTimer 轮询，最长 8s，全程不阻塞）而不是
+        旧的主线程 ``time.sleep(1.0)`` 版本：掌机冷启动偏慢，1 秒窗口既冻 UI
+        又容易误判。
         """
-        err = _spawn_restart_child()
-        if err:
-            self._set_status("❌ " + err, False)
-            return
+        self._set_status("⏳ 正在启动新实例…", True)
+        self._restart_watcher = _start_async_restart(
+            self,
+            on_ok=self._on_relaunch_ok,
+            on_fail=self._on_relaunch_failed,
+        )
+
+    def _on_relaunch_ok(self) -> None:
         _quit_after_restart(self._app)
+
+    def _on_relaunch_failed(self, msg: str) -> None:
+        self._set_status("❌ " + msg, False)
+        self._set_busy(False)
+        try:
+            QMessageBox.warning(self, "重启失败", msg)
+        except Exception:  # noqa: BLE001
+            pass
 
     def _confirm_upload(self) -> None:
         """防误触二次确认：上传日志会覆盖笔记本共享下的 logs。"""
@@ -9622,6 +10086,7 @@ class DevSyncEditPanel(QWidget):
         self._on_upload()
 
     def _on_upload(self) -> None:
+        """上传日志（后台线程跑 robocopy，不在主线程阻塞）。"""
         cfg = self._load_cfg()
         share = self._share_edit.text().strip() or cfg.get("laptop_share", "")
         if not share:
@@ -9632,11 +10097,27 @@ class DevSyncEditPanel(QWidget):
         if not os.path.isdir(src):
             self._set_status("本地 logs 不存在", False)
             return
-        rc = _devsync_robocopy(src, dst, ["/E", "/XO"])
+        if self._upload_worker is not None and self._upload_worker.isRunning():
+            return  # 正在传，防重复点击
+        self._upload_dst = dst
+        self._set_busy(True)
+        self._set_status("⏳ 正在上传日志…", True)
+        self._upload_worker = _DevSyncTaskWorker(
+            lambda: _devsync_robocopy(src, dst, ["/E", "/XO"]))
+        self._upload_worker.done.connect(self._on_upload_done)
+        self._upload_worker.failed.connect(self._on_upload_failed)
+        self._upload_worker.start()
+
+    def _on_upload_done(self, rc: int) -> None:
+        self._set_busy(False)
         if rc >= 8:
             self._set_status("❌ 日志上传失败（" + str(rc) + "）", False)
             return
-        self._set_status("✅ 日志已上传到 " + dst, True)
+        self._set_status("✅ 日志已上传到 " + self._upload_dst, True)
+
+    def _on_upload_failed(self, msg: str) -> None:
+        self._set_busy(False)
+        self._set_status("❌ 上传异常：" + msg, False)
 
     def _on_scan(self) -> None:
         if self._scan_thread is not None and self._scan_thread.isRunning():

@@ -20,7 +20,9 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import json
 import os
+import shutil
 import sys
 import threading
 import time
@@ -41,6 +43,101 @@ def log(msg: str) -> None:
             fh.write(time.strftime("%H:%M:%S") + " " + text + "\n")
     except Exception:  # noqa: BLE001
         pass
+
+
+# -- 阶段 0：外部源码自愈（坏同步绝不锁死掌机）---------------------------
+# 掌机只能靠 app 内「拉取源码并重启」更新代码，一旦拉到坏版本，最坏情况是
+# 「程序起不来 + 没法再打开面板去修」= 变砖。这里在**加载外部源码之前**先做
+# 两道自愈，保证掌机永远能用上一个好版本启动。
+#
+# 哨兵文件约定（与 edit_overlay._DevSyncPullWorker 成对，改一处必须改两处）：
+#   _ext/src.swap_pending.json —— 切换成功时写入 {"ts":..., "bak":..., "src":...}，
+#   新实例 GUI 起来后由 run_gui 删除。若下次启动它还在且已过期，说明那次切换
+#   后的进程没活到 GUI 起来（多半是新源码 import 即崩）→ 回滚。
+_EXT_SWAP_PENDING = "src.swap_pending.json"
+# 哨兵过期阈值（秒）：短于此视为「新进程正在启动中」，不介入，避免误回滚。
+_EXT_SWAP_GRACE = 180.0
+
+
+def _ext_src_compile_bad(ext_src: str) -> list[str]:
+    """返回 ext_src 下编译失败的 .py 列表（空 = 全部通过）。
+
+    用内置 ``compile()`` 而不是 ``py_compile.compile(..., quiet=2)``：CPython 的
+    ``quiet>=2`` 语义是静默吞掉一切错误——不打印、不抛异常、也不返回失败，
+    实测 Python 3.13 传 ``def (:`` 进去照样正常返回，校验形同虚设。
+    """
+    import tokenize
+
+    bad: list[str] = []
+    for _r, _ds, _fs in os.walk(ext_src):
+        _ds[:] = [d for d in _ds if d != "__pycache__"]
+        for _fn in _fs:
+            if _fn.endswith(".py"):
+                _fp = os.path.join(_r, _fn)
+                try:
+                    with tokenize.open(_fp) as _fh:
+                        compile(_fh.read(), _fp, "exec")
+                except Exception:  # noqa: BLE001
+                    bad.append(_fp)
+    return bad
+
+
+def _rollback_ext_src(ext_src: str, bak: str, reason: str) -> bool:
+    """把坏版本挪成 .broken、备份版换回来。成功返回 True。"""
+    try:
+        if not ext_src or not os.path.isdir(ext_src) or not os.path.isdir(bak):
+            return False
+        broken = ext_src + ".broken"
+        shutil.rmtree(broken, ignore_errors=True)
+        os.rename(ext_src, broken)
+        os.rename(bak, ext_src)
+        log("[外部源码自愈] " + reason + " → 已回滚到备份版本"
+            "（坏版本保留为 " + broken + " 供事后排查）")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log("[外部源码自愈] 回滚失败（忽略）：" + str(exc))
+        return False
+
+
+def _ext_src_self_heal(base: str, ext_src: str) -> None:
+    """加载外部源码前的自愈：能修就修，修不了就什么都不做（交给后面的回退）。"""
+    if not ext_src or not os.path.isdir(ext_src):
+        return
+    bak = ext_src + ".bak"
+    try:
+        # 场景 A：当前外部源码根本编译不过 → 备份版可用就换回去。
+        if os.path.isdir(bak) and _ext_src_compile_bad(ext_src):
+            _rollback_ext_src(ext_src, bak, "当前外部源码有编译错误")
+            return
+        # 场景 B：上次「拉取并重启」的哨兵还在且已过期 → 那次的新进程没起来。
+        marker = os.path.join(os.path.dirname(ext_src), _EXT_SWAP_PENDING)
+        if os.path.isfile(marker) and os.path.isdir(bak):
+            try:
+                with open(marker, "r", encoding="utf-8") as fh:
+                    info = json.load(fh)
+                ts = float(info.get("ts", 0))
+            except Exception:  # noqa: BLE001
+                ts = 0.0
+            if ts and (time.time() - ts) > _EXT_SWAP_GRACE:
+                if _rollback_ext_src(ext_src, bak,
+                                     "上次切换后的新进程未成功启动（哨兵超时）"):
+                    try:
+                        os.remove(marker)
+                    except Exception:  # noqa: BLE001
+                        pass
+    except Exception as exc:  # noqa: BLE001 - 自愈本身绝不能阻断启动
+        log("[外部源码自愈] 检查异常（忽略）：" + str(exc))
+
+
+def _clear_ext_src_swap_pending(ext_src: str) -> None:
+    """GUI 已成功起来 → 清掉「切换待确认」哨兵，确认这次切换是好的。"""
+    try:
+        p = os.path.join(os.path.dirname(ext_src or ""), _EXT_SWAP_PENDING)
+        if ext_src and os.path.isfile(p):
+            os.remove(p)
+            log("[外部源码] 已确认本次源码切换成功（清除哨兵）")
+    except Exception as exc:  # noqa: BLE001
+        log("[外部源码] 清除哨兵失败（忽略）：" + str(exc))
 
 
 # -- 阶段 1：外部源码覆盖（多设备同步测试解锁）---------------------------
@@ -76,19 +173,21 @@ def _apply_external_src_override() -> str | None:
             ext_src = os.path.join(base, "_ext", "src")
         if not os.path.isdir(ext_src):
             return None
+        # 自愈：坏版本能编译不过 / 上次切换后新进程没起来 → 先回滚到 .bak，
+        # 再走下面的校验。详见 _ext_src_self_heal（坏同步绝不锁死掌机）。
+        _ext_src_self_heal(base, ext_src)
         # 编译校验：任一 .py 语法错则放弃覆盖，回退冻结模块。
-        import py_compile
-
-        _bad = []
-        for _root, _dirs, _files in os.walk(ext_src):
-            _dirs[:] = [d for d in _dirs if d != "__pycache__"]
-            for _fn in _files:
-                if _fn.endswith(".py"):
-                    _fp = os.path.join(_root, _fn)
-                    try:
-                        py_compile.compile(_fp, doraise=True, quiet=2)
-                    except Exception:  # noqa: BLE001
-                        _bad.append(_fp)
+        #
+        # ⚠️ 2026-09-01：这里原先用 ``py_compile.compile(_fp, doraise=True,
+        # quiet=2)``，而 CPython 的 ``quiet >= 2`` 语义是「静默吞掉一切错误：
+        # 不打印、不抛异常、也不返回失败」。实测 Python 3.13 把内容为
+        # ``def (:`` 的文件传进去，调用正常返回、_bad 恒为空——这道防线从来
+        # 没生效过，坏源码照样被插到 sys.path 最前，新进程 import 即崩 →
+        # 起不来，而磁盘上的 _ext/src 已被换成坏版本，之后每次重启都起不来。
+        # 现统一走 _ext_src_compile_bad()：内置 compile()，语法错直接抛
+        # SyntaxError，且不落 .pyc（py_compile 会往 __pycache__ 写文件，
+        # 不该在启动校验阶段做）。
+        _bad = _ext_src_compile_bad(ext_src)
         if _bad:
             log(f"[外部源码覆盖] 跳过：{len(_bad)} 个文件编译失败，回退冻结模块")
             for _b in _bad[:5]:
@@ -102,7 +201,8 @@ def _apply_external_src_override() -> str | None:
         return None
 
 
-_apply_external_src_override()
+# 记录实际生效的外部源码路径：run_gui 成功起来后据此清掉「切换待确认」哨兵。
+_ACTIVE_EXT_SRC = _apply_external_src_override()
 
 
 # -- crash forensics (凝冰结魄快捷键唤出闪退专项) -----------------------------
@@ -440,6 +540,10 @@ def run_gui(root: str, config_path: str | None = None) -> int:
         )
         window.raise_()
         window.activateWindow()
+        # 窗口已真的建起来并显示 → 这次「拉取并重启」确认成功，清掉哨兵。
+        # 若新源码有运行期错误（能编译但 import 就崩），根本走不到这里，
+        # 哨兵会留到下次启动，由 _ext_src_self_heal 自动回滚到备份版本。
+        _clear_ext_src_swap_pending(_ACTIVE_EXT_SRC)
 
         log("[启动] 进入事件循环 qapp.exec() ...")
         t0 = time.time()
