@@ -545,9 +545,6 @@ class BlockPanel(QFrame):
             except Exception:
                 self._card_fill = QColor(20, 24, 33)
         self._card_fill_alpha = max(0, min(255, int(alpha)))
-        import sys as _sys
-        print(f"[DBG set_card_fill] {self.__class__.__name__} -> "
-              f"{self._card_fill.name()} a={self._card_fill_alpha}", file=_sys.stderr)
         self.update()
 
     def _resolve_accent(self) -> Any:

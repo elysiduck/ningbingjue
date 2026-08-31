@@ -4358,6 +4358,20 @@ class _OverlayWindow(QWidget):
             else:
                 self._build_page_container(idx)
                 self._show_page(idx)
+            # 全量重建后面板是全新对象（单卡填充取 BlockPanel 默认值，而非当前
+            # 已改的值）。但 _show_page 里的 apply_card_fill 重播被 `if not
+            # was_cached` 跳过了——因为本分支先 _build_page_container 把容器塞进
+            # _page_containers，_show_page 再算 was_cached 时它已是 True，于是
+            # 新面板永远拿不到「主题与蒙版」里刚改的卡片颜色/透明度。结果：改完
+            # 保存返回主页面，卡片仍显示旧/默认填充，必须重启 nbj 才正常（重启
+            # 走首次 _show_page，was_cached=False 会下发）。这里在重建后强制重播，
+            # 保证新建面板立即携带当前填充。窗口级属性（托盘/页面底色，由窗口
+            # 绘制且已 live 更新）不受影响，无需在此处理。
+            try:
+                self.apply_card_fill(self._card_fill_color.name(),
+                                     self._card_fill_alpha)
+            except Exception:
+                pass
         else:
             # Lightweight page switch: cache swap only.
             self._show_page(idx, editor_all=editor_all)
