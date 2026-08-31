@@ -23,7 +23,8 @@ SDL_InitSubSystem(0x00002000) → SDL_GameControllerOpen），所以验出来的
 所以它能驱动 SDL 手柄时就代表 dll_hijack 模式下也能驱动；但**反作弊 device_disable
 模式下物理设备被禁用**，本探针也读不到 —— 那属于另一类不可用，需在主程序里单独处理。
 
-运行（在真机、手柄已连接时）：python tools/gamepad_rumble_probe.py
+运行（在真机、手柄已连接时）：
+    runtime/python/python.exe tools/gamepad_rumble_probe.py
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from __future__ import annotations
 import ctypes
 import os
 import sys
+import time
 
 c_int = ctypes.c_int
 c_uint = ctypes.c_uint
@@ -106,6 +108,20 @@ def _verdict(rumble_ok: bool, has_rumble: int, physical: str,
             "若毫无反应则 rumble 不可用，只留视觉半。")
 
 
+def _rumble(dll, h, low: int, high: int, ms: int) -> int:
+    """发一次 rumble 并打印返回码 + SDL_GetError，便于区分失败原因。
+
+    独立函数，供「主脉冲」与「r 重发循环」复用。
+    """
+    rc = dll.SDL_GameControllerRumble(h, c_uint(low), c_uint(high), c_uint(ms))
+    err = dll.SDL_GetError()
+    err_s = err.decode("utf-8", "replace").strip() if err else ""
+    tag = "（已下发）" if rc == 0 else f"（失败: {err_s or '无错误串'}）"
+    print(f"       → SDL_GameControllerRumble({ms}ms, lo={low:#06x}, "
+          f"hi={high:#06x}) 返回 {rc} {tag}")
+    return rc
+
+
 def main() -> int:
     label, path = _find_sdl2_dll()
     if path:
@@ -139,6 +155,7 @@ def main() -> int:
         print(f"[WARN] 读不到 SDL 版本: {e}")
         sdl_version = (0, 0, 0)
 
+    # 函数签名注册（必须在调用前设好）
     dll.SDL_InitSubSystem.argtypes = [c_uint]
     dll.SDL_InitSubSystem.restype = c_int
     dll.SDL_QuitSubSystem.argtypes = [c_uint]
@@ -155,27 +172,9 @@ def main() -> int:
     dll.SDL_GameControllerClose.argtypes = [c_void_p]
     dll.SDL_GameControllerClose.restype = None
     dll.SDL_GetError.restype = c_char_p
-
-
-def _rumble(dll, h, low: int, high: int, ms: int) -> int:
-    """发一次 rumble 并打印返回码 + SDL_GetError，便于区分失败原因。"""
-    rc = dll.SDL_GameControllerRumble(h, c_uint(low), c_uint(high), c_uint(ms))
-    err = dll.SDL_GetError()
-    err_s = err.decode("utf-8", "replace").strip() if err else ""
-    tag = "（已下发）" if rc == 0 else f"（失败: {err_s or '无错误串'}）"
-    print(f"       → SDL_GameControllerRumble({ms}ms, lo={low:#06x}, "
-          f"hi={high:#06x}) 返回 {rc} {tag}")
-    return rc
-
-    print("[→] 调用 SDL_InitSubSystem(GAMECONTROLLER) …", flush=True)
-    _rc_init = dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER)
-    print(f"[✓/✗] InitSubSystem 返回 {_rc_init}", flush=True)
-    if _rc_init != 0:
-        err = dll.SDL_GetError()
-        print(f"[FAIL] SDL_InitSubSystem(GAMECONTROLLER) 失败: "
-              f"{err.decode('utf-8', 'replace') if err else '?'}")
-        print(_verdict(False, 0, ""))
-        return 2
+    # 触发 SDL 把逻辑 GameController 关联到物理 HID 设备（独立进程无事件循环，
+    # 必须手动 Pump 一次，否则 Rumble 会报 "isn't correlated yet"）。
+    dll.SDL_PumpEvents.restype = None
 
     # 可选函数（SDL 2.0.9+ 才有）
     has_funcs = True
@@ -193,6 +192,18 @@ def _rumble(dll, h, low: int, high: int, ms: int) -> int:
         print("[WARN] SDL < 2.0.9，SDL_GameControllerRumble 可能不存在。")
         has_funcs = has_funcs and False
 
+    # ① 初始化 GAMECONTROLLER 子系统（带卡点标记，定位阻塞用）
+    print("[→] 调用 SDL_InitSubSystem(GAMECONTROLLER) …", flush=True)
+    _rc_init = dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER)
+    print(f"[✓/✗] InitSubSystem 返回 {_rc_init}", flush=True)
+    if _rc_init != 0:
+        err = dll.SDL_GetError()
+        print(f"[FAIL] SDL_InitSubSystem(GAMECONTROLLER) 失败: "
+              f"{err.decode('utf-8', 'replace') if err else '?'}")
+        print(_verdict(False, 0, ""))
+        return 2
+
+    # ② 枚举手柄（带卡点标记）
     print("[→] 调用 SDL_NumJoysticks() …", flush=True)
     n = dll.SDL_NumJoysticks()
     print(f"[✓] NumJoysticks 返回 {n}", flush=True)
@@ -224,8 +235,9 @@ def _rumble(dll, h, low: int, high: int, ms: int) -> int:
                   f"HasRumbleTriggers={has_rt}")
             reported.append((i, name, h, has_r))
 
-            # 发一次 400ms 强脉冲，让用户肉验
+            # 发一次 400ms 强脉冲，让用户肉验（先 PumpEvents 触发关联）
             if has_funcs:
+                dll.SDL_PumpEvents()
                 rc = _rumble(dll, h, 0xFFFF, 0xFFFF, 400)
                 if rc == 0:
                     any_rumble = True
@@ -242,13 +254,12 @@ def _rumble(dll, h, low: int, high: int, ms: int) -> int:
 
     if ans.lower() == "r":
         print("重发 3 轮 400ms 脉冲（每轮间隔 600ms）…")
-        import time
-        for r in range(3):
-            for (i, _name, h, _hr) in reported:
+        for _r in range(3):
+            for (_i, _name, h, _hr) in reported:
                 try:
                     _rumble(dll, h, 0xFFFF, 0xFFFF, 400)
                 except Exception as e:  # noqa: BLE001
-                    print(f"       [重发 {i}] 异常: {e}")
+                    print(f"       [重发 {_i}] 异常: {e}")
             time.sleep(1.0)
         try:
             ans = input("    再确认 (y/n): ").strip()
