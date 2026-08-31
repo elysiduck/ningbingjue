@@ -6,10 +6,11 @@
 
   * 检测系统是否已装 RTSS（注册表 + 常见目录）；
   * 系统已装且版本 ≥ 随包内置版本 → 直接用系统的，不释放任何文件；
-  * 否则若随包内置了 RTSS（仅 ``NBJ_BUNDLE_RTSS=1`` 构建才内嵌，默认不内嵌） →
+  * 否则若随包内置了 RTSS（自用默认内嵌，仅 ``NBJ_BUNDLE_RTSS=0`` 才关） →
     释放到用户可写目录 ``%LOCALAPPDATA%\\NingBingJue\\RTSS``（零 UAC），
     调官方 ``RTSS.exe /I`` 自注册，Vulkan 层退 ``HKCU``；
-  * 两路都没有 → 返回 ``missing``，由 UI 引导用户去官方下载（我们不分发二进制）。
+  * 两路都没有（系统未装、且本构建未内嵌 RTSS，如 ``NBJ_BUNDLE_RTSS=0`` 纯净包）
+    → 返回 ``missing``，由 UI 引导用户去官方下载。
 
 所有异常都被吞掉并落日志，返回稳定的 ``(state, text)`` 元组，绝不抛给调用方。
 """
@@ -142,7 +143,7 @@ def system_rtss_dir() -> "str | None":
 
 
 def bundle_rtss_dir() -> "str | None":
-    """随包内置的 RTSS 目录（仅 ``NBJ_BUNDLE_RTSS=1`` 构建才随包）。
+    """随包内置的 RTSS 目录（自用默认随包；仅 ``NBJ_BUNDLE_RTSS=0`` 才不内嵌）。
 
     冻结态：``sys._MEIPASS/ningbingjue/vendor/RTSS``。
     源码/调试态：``src/ningbingjue/vendor/RTSS``（与 ryzenadj / VirtualDesktop 同级）。

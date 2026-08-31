@@ -912,12 +912,12 @@ def generate_unblock_bat(output_dir: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# HWiNFO 内嵌支持（--bundle-hwinfo）
+# HWiNFO 内嵌支持（2026-08-31 起：自用默认内嵌）
 # ---------------------------------------------------------------------------
-# 与 RTSS 同构：默认不内嵌，仅用户显式 --bundle-hwinfo 时把官方 HWiNFO 便携包
-# 的 HWiNFO64.exe + 审计版 INI 放進 src/ningbingjue/vendor/HWiNFO，再由 build_exe
-# 的 NBJ_BUNDLE_HWINFO=1 打进冻结文件夹；最终由 make_installer 的 [Files] 整目录
-# 拷贝进安装包，安装后 nbj 首次运行 ensure_hwinfo() 释放到 LOCALAPPDATA。
+# 用户确认自用场景不受再分发条款限制，故默认随包分发：只要 vendor/HWiNFO 已有
+# HWiNFO64.exe（或显式给了 --hwinfo-src），安装包默认就内嵌、安装后首次运行
+# ensure_hwinfo() 释放到 LOCALAPPDATA。仅 NBJ_BUNDLE_HWINFO=0 显式关闭时出纯净包。
+# --bundle-hwinfo 仍保留（与 build_installer_with_hwinfo.bat 兼容），但已是默认行为。
 def prepare_hwinfo_bundle(hwinfo_src: str | None) -> bool:
     """确保 src/ningbingjue/vendor/HWiNFO 内含 HWiNFO64.exe（审计版 INI）。
 
@@ -1048,14 +1048,13 @@ def main() -> int:
                         help="更新内容条目，分号分隔；如 \"修复风扇;新增任务列表\""
                              "。未提供时尝试用 git log 生成。")
     parser.add_argument("--bundle-hwinfo", action="store_true",
-                        help="把 HWiNFO 官方便携包内嵌进冻结文件夹（等价于构建时设 "
-                             "NBJ_BUNDLE_HWINFO=1），安装包/安装后 nbj 会顺带部署 HWiNFO。"
-                             "需配合 --hwinfo-src 指定官方 HWiNFO64 zip/exe，或 vendor/HWiNFO "
-                             "已存在 HWiNFO64.exe。注意：HWiNFO 再分发条款需你自行核对 "
-                             "（hwinfo.com/files/license.pdf）。")
+                        help="（已默认生效，仅作兼容保留）显式要求内嵌 HWiNFO。自用场景"
+                             "默认即随包分发，无需传此开关；仅 NBJ_BUNDLE_HWINFO=0 才关。"
+                             "通常配合 --hwinfo-src 指定官方 HWiNFO64 zip/exe，或 vendor/HWiNFO "
+                             "已存在 HWiNFO64.exe。")
     parser.add_argument("--hwinfo-src", default=None,
                         help="HWiNFO 二进制来源：官方便携 zip（含 HWiNFO64.exe）或直接的 "
-                             "HWiNFO64.exe 路径。--bundle-hwinfo 时若 vendor/HWiNFO 无 exe 则从此提取。")
+                             "HWiNFO64.exe 路径。默认内嵌时若 vendor/HWiNFO 无 exe 则从此提取。")
     args = parser.parse_args()
 
     root = os.path.dirname(os.path.abspath(__file__))
@@ -1069,19 +1068,32 @@ def main() -> int:
     )
     with_config = bool(args.with_config) or has_exclude_cli
 
-    # 0) HWiNFO 内嵌准备（在构建之前）：设 env 透传给 build_exe，并落实二进制。
-    if getattr(args, "bundle_hwinfo", False):
-        os.environ["NBJ_BUNDLE_HWINFO"] = "1"
-        _log("步骤 0：--bundle-hwinfo 已开启 → 设 NBJ_BUNDLE_HWINFO=1")
-        if not prepare_hwinfo_bundle(getattr(args, "hwinfo_src", None)):
-            _log("【警告】HWiNFO 内嵌未就绪：vendor/HWiNFO 无 exe 且 --hwinfo-src 未"
-                 "提供/无效。安装包将【不含】HWiNFO，运行时卡片引导官方下载。")
-            _log("      （HWiNFO 再分发条款需你自行核对 hwinfo.com/files/license.pdf）")
-        else:
-            _log("HWiNFO 已就绪，将随冻结文件夹打进安装包。")
-    else:
-        # 明确关闭，避免父进程环境变量泄漏导致误内嵌。
+    # 0) HWiNFO 内嵌准备（在构建之前）：自用默认内嵌，仅 NBJ_BUNDLE_HWINFO=0 关闭。
+    nbj_bundle = os.environ.get("NBJ_BUNDLE_HWINFO")
+    if nbj_bundle == "0":
+        # 显式关闭：出不含 HWiNFO 的纯净包，并清掉可能泄漏的环境变量。
         os.environ.pop("NBJ_BUNDLE_HWINFO", None)
+        _log("步骤 0：NBJ_BUNDLE_HWINFO=0 显式关闭 → 不内嵌 HWiNFO（出纯净包）")
+    else:
+        os.environ["NBJ_BUNDLE_HWINFO"] = "1"
+        hwinfo_src = getattr(args, "hwinfo_src", None)
+        if prepare_hwinfo_bundle(hwinfo_src):
+            _log("HWiNFO 已就绪，将随冻结文件夹打进安装包。")
+        else:
+            _log("【默认内嵌】vendor/HWiNFO 无 exe 且未提供 --hwinfo-src，"
+                 "安装包将【不含】HWiNFO，运行时卡片引导官方下载。"
+                 "可用 --hwinfo-src 指定官方 zip/exe 后重跑。")
+
+    # 0b) RTSS 内嵌准备（与 HWiNFO 同决策：自用默认内嵌，仅 NBJ_BUNDLE_RTSS=0 关闭）。
+    # RTSS 是裁剪版、由 extract_rtss_bundle.py 直接产出到 vendor/RTSS，
+    # 与 HWiNFO 不同：无需从 zip 提取，只要 vendor/RTSS 目录存在即随包。
+    nbj_rtss = os.environ.get("NBJ_BUNDLE_RTSS")
+    if nbj_rtss == "0":
+        os.environ.pop("NBJ_BUNDLE_RTSS", None)
+        _log("步骤 0b：NBJ_BUNDLE_RTSS=0 显式关闭 → 不内嵌 RTSS（出纯净包）")
+    else:
+        os.environ["NBJ_BUNDLE_RTSS"] = "1"
+        _log("步骤 0b：RTSS 默认内嵌（vendor/RTSS 存在即随冻结文件夹打进安装包）")
 
     # 1) 构建冻结文件夹
     if not args.no_build:

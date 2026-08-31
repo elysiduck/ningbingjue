@@ -14,8 +14,8 @@ from __future__ import annotations
 import math
 
 from PyQt6.QtCore import QPointF, QSize, Qt
-from PyQt6.QtGui import (QColor, QFont, QLinearGradient, QPainter,
-                         QPainterPath, QPen)
+from PyQt6.QtGui import (QColor, QFont, QFontMetrics, QLinearGradient,
+                         QPainter, QPainterPath, QPen)
 from PyQt6.QtWidgets import QPushButton, QSizePolicy, QWidget
 
 # Gamepad ABXY badge colours (A绿 / B红 / X蓝 / Y黄) — matches the original's
@@ -59,6 +59,17 @@ CAPSULE_INNER_HEIGHT = 12   # 顶部胶囊实际高度（贴合字母、不超�
 # 自绘按钮内部文字留白（避免文字贴边，看起来像被压扁）
 BUTTON_PAD_X = 8
 BUTTON_PAD_Y = 3
+
+# HintButton 的基线字号（px）——所有由 HintButton 自己生成的样式表（默认外观、
+# 预设、预设激活/未激活变体）都必须显式写回这个值。
+#
+# 为什么必须显式写：run.py:_freeze_application_font() 把 QApplication 的全局
+# 字体锁成了 16px（为绕开 Windows「辅助功能 → 文本大小」缩放）。而 QSS 有一条
+# 反直觉的规则——**样式表里不含 font-size 时，控件就回落到 QApplication 全局
+# 字体**，不是「继承上一次的字号」。于是任何漏写 font-size 的样式表都会让按钮
+# 文字从 13px 悄悄变成 16px（+23%），表现为「套了按钮预设后字比默认按钮大」。
+# 见 core/color/styles.py:_font_size_qss（预设样式表同样靠这个常量兜底）。
+HINT_BUTTON_FONT_PX = 13
 
 # 手柄提示胶囊（ABXY 徽章）统一尺寸：圆点略放大、内部字母缩小，让字母在
 # 胶囊内有呼吸余量、不再显得过大（原左/右胶囊 letter=16px 塞进 16px 圆点 →
@@ -470,6 +481,9 @@ class HintButton(QPushButton):
         self._hint_placement_lock = None
         self._accent = "#7da2c8"
         self._active = False
+        # 基线字号（px）：预设样式表从这个值取 font-size，保证「套预设前后」
+        # 字号完全一致（详见 HINT_BUTTON_FONT_PX 的注释）。
+        self._base_font_px = HINT_BUTTON_FONT_PX
         # 切角（chamfer）自绘所需的状态。仅当按钮风格预设写入了 cut_size 且
         # corner_radius==0 时，paintEvent 才走自绘切角路径；其余情况仍是原生
         # 样式表绘制（行为不变）。默认 None 表示「未套用预设、用原生绘制」。
@@ -655,7 +669,7 @@ class HintButton(QPushButton):
             f" background: {bg}; color: {fg};"
             f" border: 1px solid {border}; border-radius: {radius}px;"
             f" padding: {vpad}px 12px;{lpad}"
-            " font-size: 13px;" + align +
+            f" font-size: {self._base_font_px}px;" + align +
             "}"
             "QPushButton:hover { background: rgba(255,255,255,0.16); }"
             "QPushButton:focus { outline: none;"
@@ -685,7 +699,8 @@ class HintButton(QPushButton):
             f"QPushButton {{ background: rgb({back[0]},{back[1]},{back[2]});"
             f" color: rgb({fore[0]},{fore[1]},{fore[2]});"
             f" border: {bt}px solid rgb({border[0]},{border[1]},{border[2]});"
-            f" border-radius: {cr}px; padding: 4px 10px;{lpad}{align} }}"
+            f" border-radius: {cr}px; padding: 4px 10px;{lpad}{align}"
+            f" font-size: {self._base_font_px}px; }}"
             "QPushButton:hover { background: rgba(255,255,255,0.16); }"
             "QPushButton:focus { outline: none;"
             " border: 1px solid rgba(255,255,255,0.40); }"
@@ -934,15 +949,21 @@ class GamepadHintBar(QWidget):
         # depending on CSS vars.  Dark background theme → light text below.
         self._pill_w = 16
         self._pill_h = 13
-        self._pill_extra = 6  # 长按条目额外留白：给右侧圆点腾位置（不压字母）
-        self._gap = 10
-        self._text_gap = 4
+        self._pill_extra = 9  # 长按条目额外留白：给右侧圆点腾位置（不压字母、不贴边缘）
+        self._gap = 7
+        self._text_gap = 3
         self._letter_px = 11
-        self._label_px = 11
-        self.setContentsMargins(2, 4, 2, 4)
+        self._label_px = 10
+        self.setContentsMargins(2, 3, 2, 3)
+        # 水平策略用 Preferred：布局会优先给足 sizeHint（完整文案），空间不足时
+        # 按 minimumSizeHint 压缩到「所有胶囊 + 间隔」的宽度，掌机窄屏下只省略
+        # 文字、绝不把整行压缩到 0 导致手柄键提示全部消失（Ignored 策略在紧空间
+        # 下会把 bar 压成 0px）。
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
         self._entries = []
         self._layout = []
         self._total_w = 0
+        self._min_w = 0
         self.set_entries(entries or [])
 
     def set_entries(self, entries: list) -> None:
@@ -970,19 +991,34 @@ class GamepadHintBar(QWidget):
             self._layout.append((x, letter, text, entry_w, lp, pw))
             x += entry_w + self._gap
         self._total_w = max(0, x - self._gap)
+        if self._layout:
+            pill_only = sum(item[5] for item in self._layout)
+            self._min_w = pill_only + (len(self._layout) - 1) * self._gap
+        else:
+            self._min_w = 0
         self.setFixedHeight(self._pill_h + 8)
 
     def sizeHint(self) -> QSize:  # noqa: N802 - Qt camelCase
         return QSize(self._total_w, self._pill_h + 8)
 
     def minimumSizeHint(self) -> QSize:  # noqa: N802 - Qt camelCase
-        return self.sizeHint()
+        # 下限 = 所有胶囊 + 间隔（不含文字）。避免窄屏被压到 0 导致整行提示消失；
+        # 空间再不够时绘制代码会省略文字，至少保证键帽可见。
+        return QSize(max(8, self._min_w), self._pill_h + 6)
 
     def paintEvent(self, ev: object) -> None:  # noqa: N802 - Qt camelCase
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        tf = QFont(self.font())
+        tf.setPixelSize(self._label_px)
+        fm = QFontMetrics(tf)
         y = (self.height() - self._pill_h) // 2
+        # 按实际（可能被窄屏压缩后的）宽度绘制：超出可用宽度的条目不再绘制，
+        # 最后一个可见条目的文案用省略号截断，保证任何屏宽下都「显示完全、不溢出」。
+        available = self.width()
         for (x, letter, text, entry_w, lp, pw) in self._layout:
+            if x >= available:
+                break
             lead = pw + self._text_gap
             is_long = bool(lp) and letter in HINT_COLORS
             if letter in HINT_COLORS:
@@ -1008,21 +1044,21 @@ class GamepadHintBar(QWidget):
                 p.drawText(x, y, self._pill_w, self._pill_h,
                            Qt.AlignmentFlag.AlignCenter, letter)
                 # ④-A：常驻说明条的长按标记 = 胶囊右侧留白圆点（画在加宽后的
-                # 右侧 6px 留白中央），区别于 ④-B/④-C 的按钮外置虚点弧/下方虚点。
+                # 右侧留白中央），区别于 ④-B/④-C 的按钮外置虚点弧/下方虚点。
                 if is_long:
                     _draw_inner_dot(p, HINT_COLORS[letter],
                                     x + self._pill_w + self._pill_extra / 2.0,
                                     y + self._pill_h / 2.0, 2.0)
-            # label text — light, readable in dark theme；长按键要把文字右移
-            # 拖尾宽度，避免压在渐隐横条上。
-            p.setFont(self.font())
-            tf = QFont(self.font())
-            tf.setPixelSize(self._label_px)
+            # label text — light, readable in dark theme。窄屏超出可用宽度时
+            # 用省略号截断，保证不被裁掉、也保持紧凑。
             p.setFont(tf)
             p.setPen(QColor(223, 230, 240))
             tx = x + lead
-            p.drawText(tx, y, entry_w - lead,
-                       self._pill_h,
-                       Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                       text)
+            max_text_w = available - tx
+            if max_text_w > 4 and text:
+                drawn = fm.elidedText(text, Qt.TextElideMode.ElideRight,
+                                      max_text_w)
+                p.drawText(tx, y, max_text_w, self._pill_h,
+                           Qt.AlignmentFlag.AlignLeft
+                           | Qt.AlignmentFlag.AlignVCenter, drawn)
         p.end()

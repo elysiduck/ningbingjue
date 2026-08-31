@@ -11,11 +11,12 @@ build_exe.py 会把整个目录打进 pyinstaller 构建，运行时释放到
   HWiNFO64.exe        官方原版（建议 8.50+，本仓库测试基准 8.48-5990）
   HWiNFO64.INI        （可选）nbj 启动时会用自己的审计版 INI 覆盖关键键，见下
 
-默认【不】内嵌
---------------
-出厂构建（NBJ_BUNDLE_HWINFO 未设）不会读取本目录。此时 nbj 不携带 HWiNFO
-二进制，只在监控卡片上检测系统是否已安装、是否运行、共享内存是否新鲜；
-缺失时引导用户去 https://www.hwinfo.com/download/ 下载便携版。
+默认【内嵌】（自用 2026-08-31 起）
+-------------------------------
+自用场景默认随包分发：打包/installer 默认读取本目录（只要放了 HWiNFO64.exe），
+安装后 nbj 首次运行把内置 HWiNFO 释放到 %LOCALAPPDATA%\NingBingJue\HWiNFO\。
+若本目录没放 HWiNFO64.exe，构建会优雅跳过（打印警告），运行时卡片引导官方下载。
+仅 NBJ_BUNDLE_HWINFO=0 才出不含 HWiNFO 的纯净包。
 
 一步到位把 HWiNFO 打进安装包
 ----------------------------
@@ -36,13 +37,13 @@ NBJ_BUNDLE_HWINFO=1 跑 build_exe；③ 跑 make_installer 出 setup.exe。
 卸载 nbj 时安装器也会一并清理该目录（顺带装则顺带卸）。
 
 
-为什么默认不内嵌（2026-08-31 grill 决策）
+为什么仍保留 NBJ_BUNDLE_HWINFO=0 关闭开关（2026-08-31）
 -----------------------------------------
-1. 再分发条款未确认：hwinfo.com/files/license.pdf 被 Cloudflare 挡住读不到原文，
-   需使用者自行核对是否允许随第三方软件再分发。
-2. 体积 10.9 MB，会让 portable 包近乎翻倍。
-3. 免费版共享内存有 12 小时自动断供限制，内嵌也换不来「常驻可靠」，
-   收益不足以覆盖前两项成本。
+1. 体积 10.9 MB，会让 portable 包近乎翻倍——介意体积者可关。
+2. 免费版共享内存有 12 小时自动断供限制，需 nbj 监控卡片预警+兜底配合；
+   若想完全不依赖内置 HWiNFO、只用系统已装版本，用 =0 关。
+（再分发许可：用户已确认自用场景不受限制，故默认内嵌。若要分发给他人，
+请先自行核对 hwinfo.com/files/license.pdf 是否允许随第三方软件再分发。）
 
 nbj 释放的审计版 INI 会保留 SensorsSM=1 / SensorsOnly=1 / MinimalizeSensors=1 /
 AutoUpdate=0，并删除 EC=0 等关闭项（让电池 EC/ACPI 与 SVI 电压读数能出来），

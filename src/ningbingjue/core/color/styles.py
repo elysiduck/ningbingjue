@@ -243,6 +243,51 @@ def apply_per_button_preset(ctrl: Any, preset_name: str) -> None:
     _apply_style_to_ctrl(ctrl, st)
 
 
+def _font_size_qss(ctrl: Any) -> str:
+    """Return the ``font-size: Npx;`` fragment a preset stylesheet must carry.
+
+    根因（「套了按钮预设后字比默认按钮大」）：
+
+      * ``run.py:_freeze_application_font()`` 把 QApplication 全局字体锁成
+        **16px**（为了绕开 Windows「辅助功能 → 文本大小」缩放）。
+      * HintButton 的默认外观样式表显式写了 ``font-size: 13px``，所以默认
+        按钮看起来是 13px。
+      * 但 Qt 样式表的规则是：**样式表里不含 font-size 时，控件回落到
+        QApplication 的全局字体**——不是「继承上一次的字号」。预设生成的样式
+        表此前恰恰【完全没写 font-size】，于是文字从 13px 跳到 16px（+23%），
+        表现为「一套预设字就变大」。
+
+    修复：把按钮自身的基线字号写回预设样式表。优先级：
+
+      1. ``ctrl._base_font_px`` —— HintButton 记录的基线字号（最准，且不受
+         「已套过一次预设」影响）。
+      2. ``ctrl.font().pixelSize()`` —— 普通 QPushButton 的当前字号（必须在
+         ``setStyleSheet`` **之前**读取，因为 QSS 会覆盖 widget font）。
+      3. 兜底 13px（与 HUD 默认按钮一致）。
+
+    注意：QSS 的 font-size **不会**回写到 ``QWidget.font()``，所以不能靠反复
+    读 ``font()`` 来判断「当前生效字号」——那永远返回没设过样式表时的值。
+    """
+    px = 0
+    base = getattr(ctrl, "_base_font_px", None)
+    if isinstance(base, int) and base > 0:
+        px = base
+    else:
+        try:
+            f = ctrl.font()
+            if f.pixelSize() > 0:
+                px = int(f.pixelSize())
+            elif f.pointSizeF() > 0:
+                # pointSize → px（96dpi 基准）；QSS 的 px 是逻辑像素，与
+                # QWidget 坐标系一致，不额外乘 devicePixelRatio。
+                px = int(round(f.pointSizeF() * 96.0 / 72.0))
+        except Exception:
+            px = 0
+    if px <= 0:
+        px = 13
+    return f" font-size: {px}px;"
+
+
 def _apply_style_to_ctrl(ctrl: Any, st: ButtonStyle) -> None:
     """Push a ButtonStyle onto any button control (RoundedButton or QPushButton)."""
     colors = st.colors
@@ -325,6 +370,8 @@ def _apply_style_to_ctrl(ctrl: Any, st: ButtonStyle) -> None:
         # → 圆角预设绑定后看起来还是矩形）。
         cr = max(0, int(st.corner_radius or 0))
         cut = int(st.cut_size or 0)
+        # 字号基线必须在 setStyleSheet 之前取（QSS 会覆盖 widget font）。
+        fss = _font_size_qss(ctrl)
         if cr == 0 and cut > 0 and hasattr(ctrl, "_bs_back"):
             # 切角预设：原生 QPushButton 只能圆角、无法做切角，背景/边框改由
             # HintButton 自绘（_paint_chamfer）。样式表此处【背景透明 + 无边框】，
@@ -332,14 +379,14 @@ def _apply_style_to_ctrl(ctrl: Any, st: ButtonStyle) -> None:
             # 把整块填满，切角处也被同色填满 → 看起来「切角没生效」。文字色保留（无害）。
             ss = (
                 f"QPushButton {{ background: transparent; color: rgb({fore.r},{fore.g},{fore.b});"
-                f" border: none; }}"
+                f" border: none;{fss} }}"
             )
         else:
             ss = (
                 f"QPushButton {{ background: rgb({back.r},{back.g},{back.b});"
                 f" color: rgb({fore.r},{fore.g},{fore.b});"
                 f" border: {bt}px solid rgb({border.r},{border.g},{border.b});"
-                f" border-radius: {cr}px; padding: 4px 10px; }}"
+                f" border-radius: {cr}px; padding: 4px 10px;{fss} }}"
             )
             if hover or hover_fore or hover_border:
                 ss += " QPushButton:hover {"

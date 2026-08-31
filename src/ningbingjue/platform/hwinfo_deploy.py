@@ -1,26 +1,26 @@
 # -*- coding: utf-8 -*-
-"""platform/hwinfo_deploy.py — HWiNFO 便携自部署（可选内嵌，默认不内嵌）。
+"""platform/hwinfo_deploy.py — HWiNFO 便携自部署（2026-08-31 起：默认随包分发）。
 
-为什么不做成「安装包里附带」
-============================
+为什么现在默认随包分发
+======================
 与 RTSS 完全同一个决策（见 ``platform/rtss_deploy.py`` 的模块 docstring）：
 NBJ 有两种部署形态——Inno Setup 安装包与 portable 目录，而「移植到新机」通常是
 直接拷 portable 目录，**portable 没有安装程序**，所以「安装时顺便装上」这个时机
 根本不存在。真正要做的是**首次运行时自部署**。
 
-再叠加两条 HWiNFO 特有的约束：
+用户已确认是**自用**场景，不再受再分发条款限制，故默认随包分发（除非显式
+``NBJ_BUNDLE_HWINFO=0``）。附带两条历史权衡，现仅作背景保留：
 
-1. **分发条款未确认**：``https://www.hwinfo.com/files/license.pdf`` 被 Cloudflare
-   挡住，AI 侧无法读到再分发条款。RTSS 当时的结论是「EULA 禁止再分发」，
-   HWiNFO 需用户自行核对。故默认不内嵌。
+1. **分发条款**：RTSS 当时结论是「EULA 禁止再分发」、HWiNFO 许可页需自行核对；
+   自用场景已豁免，故不再作为默认关闭的理由。
 2. **免费版共享内存只有 12 小时**：官方许可页 footnote 4 明确「运行 12 小时后
-   自动停用，且需手动重新启用」。这意味着即使内嵌，长期常驻也不可靠——内嵌收益
-   不足以覆盖体积（10.9 MB）与条款风险。
+   自动停用，且需手动重新启用」。这意味着即使内嵌，长期常驻也不可靠——nbj 监控
+   卡片已做 12h 倒计时预警 + 事后 pollTime 新鲜度兜底，缓解该限制。
 
 因此本模块与 RTSS 同构：
 
   * 系统已装 HWiNFO 且版本 ≥ 内置 → 直接用系统的，**不释放任何文件**；
-  * 否则若本构建内嵌了 HWiNFO（仅 ``NBJ_BUNDLE_HWINFO=1`` 才有）→ 释放到
+  * 否则若本构建内嵌了 HWiNFO（默认内嵌，NBJ_BUNDLE_HWINFO=0 才关）→ 释放到
     ``%LOCALAPPDATA%\\NingBingJue\\HWiNFO``（用户可写，零 UAC）；
   * 两路都没有 → 返回 ``missing``，由 UI 引导去官网下载。
 
@@ -181,7 +181,7 @@ def system_hwinfo_dir() -> "str | None":
 
 
 def bundle_hwinfo_dir() -> "str | None":
-    """随包内置的 HWiNFO 目录（仅 ``NBJ_BUNDLE_HWINFO=1`` 构建才随包）。
+    """随包内置的 HWiNFO 目录（默认随包分发，NBJ_BUNDLE_HWINFO=0 才关闭）。
 
     冻结态：``sys._MEIPASS/ningbingjue/vendor/HWiNFO``。
     源码/调试态：``src/ningbingjue/vendor/HWiNFO``。
