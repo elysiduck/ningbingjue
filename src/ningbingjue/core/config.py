@@ -758,6 +758,14 @@ class AppConfig:
     # When True, a successful un-freeze also minimises the Ningbingjue window
     # (to tray / taskbar) so the user returns straight to the just-thawed app.
     freeze_minimize_on_unfreeze: bool = True
+    # -- tile block (磁贴) ---------------------------------------------
+    # When True, a *successful* tile launch minimises the Ningbingjue window
+    # (to tray / taskbar) so the user lands straight in the app that was just
+    # opened — the same "launcher gets out of the way" behaviour as
+    # ``freeze_minimize_on_unfreeze``.  Global switch: it applies to every tile
+    # in every tile block (base + additional).  Failure paths NEVER minimise
+    # (the HUD must stay up to show "目标不存在").
+    tile_minimize_after_launch: bool = True
     # -- focus overlay (选中焦点蒙层) -----------------------------------
     # Colour of the selection/focus rectangle as "rrggbb". Default matches the
     # original lime-yellow (#e6ff1e). Applies to BOTH the border frame and the
@@ -876,6 +884,9 @@ class AppConfig:
             freeze_hidden=list(d.get("FreezeHidden", []) or []),
             freeze_prioritize_foreground=bool(d.get("FreezePrioritizeForeground", True)),
             freeze_minimize_on_unfreeze=bool(d.get("FreezeMinimizeOnUnfreeze", True)),
+            # 磁贴：启动成功后自动最小化本体。缺失键 → 默认 True（用户要的行为）。
+            tile_minimize_after_launch=bool(
+                d.get("TileMinimizeAfterLaunch", True)),
             # P0-1 fix: validate hex legality, not just length — a 6-char-but-
             # non-hex string (e.g. "gghhii") used to crash build_focus_style
             # on startup.  _safe_hex returns the default on any malformed input.
@@ -945,6 +956,7 @@ class AppConfig:
             "FreezeHidden": list(self.freeze_hidden),
             "FreezePrioritizeForeground": self.freeze_prioritize_foreground,
             "FreezeMinimizeOnUnfreeze": self.freeze_minimize_on_unfreeze,
+            "TileMinimizeAfterLaunch": self.tile_minimize_after_launch,
             "FocusColor": self.focus_color,
             "FocusOpacity": self.focus_opacity,
             "WindowAlign": self.window_align,

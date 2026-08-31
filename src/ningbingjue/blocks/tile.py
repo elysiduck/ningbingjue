@@ -78,7 +78,19 @@ class TileBlock:
         self.focus_idx = FocusHolder(0)
         self.in_item_mode = False
         self._last_launch_ts = 0.0
+        # 宿主窗口注入的最小化钩子（同 FreezeBlock.set_minimize_self_callback）。
+        # None = headless / 单测，自动降级为「不最小化」，不引入 Qt 依赖。
+        self._minimize_self_cb: Callable[[], None] | None = None
         self._rebuild()
+
+    def set_minimize_self_callback(self, cb: Callable[[], None] | None) -> None:
+        """注入「最小化凝冰结魄本体」的回调（由 ``app_window`` 调用）。
+
+        磁贴启动成功且 ``config.tile_minimize_after_launch`` 为真时触发，
+        把 HUD 收进托盘 / 任务栏，让用户直接落进刚打开的程序。
+        区块本身不认识 Qt 窗口，回调可空。
+        """
+        self._minimize_self_cb = cb
 
     # -- grid helpers -------------------------------------------------
     @staticmethod
@@ -179,6 +191,10 @@ class TileBlock:
             if ok:
                 # mirrors Show-TileLaunchToast
                 self.show_toast(f"▶ {tile.name} 已启动", success=True)
+                # 启动成功后按需收起本体（磁贴 = 启动器，让位给刚打开的程序）。
+                # 仅成功路径：失败要留在 HUD 上，否则 "目标不存在" 的提示
+                # 会和窗口一起消失，用户看不到到底出了什么事。
+                self._minimize_self_after_launch()
             else:
                 self.show_toast(f"目标不存在: {path}", success=False)
             return ok
@@ -194,6 +210,22 @@ class TileBlock:
         if 0 <= self.focus_idx.value < len(self.tiles):
             return self.launch(self.tiles[self.focus_idx.value])
         return False
+
+    def _minimize_self_after_launch(self) -> None:
+        """启动成功后收起本体：读全局开关 + 宿主回调，任一缺失即静默跳过。
+
+        全程吞异常——最小化只是便利行为，绝不能因为托盘不可用之类的问题
+        把异常抛回 Qt 事件处理器（PyQt6 会直接终止进程，见 ``launch`` 注释）。
+        """
+        if not getattr(self.config, "tile_minimize_after_launch", False):
+            return
+        cb = self._minimize_self_cb
+        if cb is None:
+            return
+        try:
+            cb()
+        except Exception:
+            pass
 
     @staticmethod
     def detect_type(path: str) -> str:

@@ -618,6 +618,19 @@ class TileEditPanel(QWidget):
         self._show_title.clicked.connect(self._toggle_show_title)
         f_bn.addWidget(self._show_title)
         sf.addLayout(f_bn)
+        # 全局开关（不属于某个磁贴，而是整个磁贴区块）：启动目标程序成功后
+        # 是否把凝冰结魄本体收进托盘 / 任务栏，让位给刚打开的程序。
+        f_ml = QHBoxLayout()
+        f_ml.addWidget(QLabel("启动后最小化本体"))
+        self._min_after_launch = QPushButton("已开启")
+        self._min_after_launch.setStyleSheet(
+            "QPushButton { background: rgba(255,255,255,0.08); color: #dfe6f0;"
+            " border: none; border-radius: 5px; padding: 3px 8px; }"
+            "QPushButton:hover { background: rgba(255,255,255,0.16); }")
+        self._min_after_launch.clicked.connect(self._toggle_min_after_launch)
+        f_ml.addWidget(self._min_after_launch)
+        f_ml.addStretch(1)
+        sf.addLayout(f_ml)
         bl.addWidget(s_card)
 
         # --- Card: card colour (title + frame preset picker) ----------
@@ -835,6 +848,11 @@ class TileEditPanel(QWidget):
             meta = self._extra
         self.sel = len(self.work) - 1 if self.work else -1
         self._editing = True
+        # 全局开关：启动后是否最小化本体（与选中哪个磁贴无关）。
+        _cfg = getattr(getattr(self._app, "config_manager", None), "config", None)
+        self._min_after_launch.setText(
+            "已开启" if bool(getattr(_cfg, "tile_minimize_after_launch", False))
+            else "已关闭")
         if meta is not None:
             bn = getattr(meta, "block_name", "") or ""
             self._block_name.setText(bn)
@@ -923,6 +941,21 @@ class TileEditPanel(QWidget):
                             break
             except Exception:
                 pass
+
+    def _toggle_min_after_launch(self) -> None:
+        """全局开关：磁贴启动成功后是否自动最小化凝冰结魄本体。
+
+        写回 AppConfig 后立即保存（save_all），无需等别的编辑项触发；
+        只有成功启动才最小化，失败路径见 TileBlock.launch。
+        """
+        cfg = getattr(getattr(self._app, "config_manager", None), "config", None)
+        if cfg is None:
+            return
+        new = not bool(getattr(cfg, "tile_minimize_after_launch", False))
+        cfg.tile_minimize_after_launch = new
+        self._min_after_launch.setText("已开启" if new else "已关闭")
+        if self._app is not None:
+            self._app.save_all()
 
     def _apply_block_name(self) -> None:
         name = self._block_name.text()

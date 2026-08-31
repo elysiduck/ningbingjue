@@ -1468,6 +1468,13 @@ class _OverlayWindow(QWidget):
             if hasattr(freeze, "set_refocus_callback"):
                 freeze.set_refocus_callback(self._refocus_after_freeze)
 
+        # 磁贴：启动目标程序成功后把 HUD 收进托盘 / 任务栏（走同一个
+        # _minimize_to_tray，带淡出动画 + 托盘气泡）。开关见
+        # AppConfig.tile_minimize_after_launch，失败启动不触发。
+        tile_block = self._app.blocks.get("tile")
+        if tile_block is not None and hasattr(tile_block, "set_minimize_self_callback"):
+            tile_block.set_minimize_self_callback(self._minimize_to_tray)
+
         self._fast = QTimer(self)
         self._fast.timeout.connect(self._bridge.sync_all)
         self._fast.start(1000)
