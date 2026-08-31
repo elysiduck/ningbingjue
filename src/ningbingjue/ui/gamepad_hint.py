@@ -157,17 +157,26 @@ def _draw_inner_dot(painter: QPainter, color: QColor, cx: float, cy: float,
 
 
 def _draw_long_arc(painter: QPainter, color: QColor, x: int, y: int,
-                   w: int, h: int, side: str = "right") -> None:
-    """长按标记（虚点）。
+                   w: int, h: int, side: str = "right",
+                   hold_progress: float = 0.0) -> None:
+    """长按标记（虚点），随 ``hold_progress``(0→1) 逐颗淡出。
 
+    - ``hold_progress = 0`` → 全部亮（刚按下 / 静止等待）；``= 1`` → 全部灭
+      （长按已触发）。每颗点 ``i``（0-based）的 alpha = ``clamp(1 - (progress*n
+      - i), 0, 1)``，故 progress 增大时点从首颗起**逐个消失**，像进度条倒计。
     - ``side="right"`` / ``side="left"``：以胶囊中心为圆心、半径 = 胶囊外接半径
       + ``HINT_ARC_GAP``，扫过 ±45°（共 90°）的**虚点弧**，竖排包裹胶囊右/左缘
       （④-B，长按钮用）。
     - ``side="bottom"``：在胶囊**正下方**横排 ``HINT_BOTTOM_DOTS`` 颗虚点
       （④-C，短按钮用），不占按钮横向空间。
-
-    圆点均带深色底衬，亮色按钮底（如保存按钮 #82ff1e）上也抠得出来。
     """
+    prog = max(0.0, min(1.0, float(hold_progress)))
+    n_base = HINT_BOTTOM_DOTS if side == "bottom" else HINT_ARC_DOTS
+
+    def _alpha(i: int, n: int) -> float:
+        a = 1.0 - (prog * n - i)
+        return 0.0 if a <= 0.0 else (1.0 if a >= 1.0 else a)
+
     if side == "bottom":
         # ④-C：胶囊下方横排虚点。
         use_n = HINT_BOTTOM_DOTS
@@ -178,13 +187,18 @@ def _draw_long_arc(painter: QPainter, color: QColor, x: int, y: int,
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         for i in range(use_n):
+            a = _alpha(i, use_n)
+            if a <= 0.0:
+                continue
             px = sx + i * HINT_BOTTOM_GAP
-            painter.setBrush(QColor(0, 0, 0, 160))
+            painter.setBrush(QColor(0, 0, 0, int(160 * a)))
             painter.drawEllipse(int(px - HINT_ARC_DOT_R - 1),
                                 int(py - HINT_ARC_DOT_R - 1),
                                 int(2 * (HINT_ARC_DOT_R + 1)),
                                 int(2 * (HINT_ARC_DOT_R + 1)))
-            painter.setBrush(QColor(color))
+            c = QColor(color)
+            c.setAlpha(int(255 * a))
+            painter.setBrush(c)
             painter.drawEllipse(int(px - HINT_ARC_DOT_R),
                                 int(py - HINT_ARC_DOT_R),
                                 int(2 * HINT_ARC_DOT_R),
@@ -202,18 +216,23 @@ def _draw_long_arc(painter: QPainter, color: QColor, x: int, y: int,
     painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     painter.setPen(Qt.PenStyle.NoPen)
     for i in range(n):
+        a = _alpha(i, n)
+        if a <= 0.0:
+            continue
         deg = start + (-45.0 + 90.0 * i / (n - 1))   # -45°..+45° 均布
         rad = math.radians(deg)
         px = cx + R * math.cos(rad)
         py = cy + R * math.sin(rad)
         # 深色底衬（比圆点各大 1px）
-        painter.setBrush(QColor(0, 0, 0, 160))
+        painter.setBrush(QColor(0, 0, 0, int(160 * a)))
         painter.drawEllipse(int(px - HINT_ARC_DOT_R - 1),
                             int(py - HINT_ARC_DOT_R - 1),
                             int(2 * (HINT_ARC_DOT_R + 1)),
                             int(2 * (HINT_ARC_DOT_R + 1)))
         # 彩色圆点
-        painter.setBrush(QColor(color))
+        c = QColor(color)
+        c.setAlpha(int(255 * a))
+        painter.setBrush(c)
         painter.drawEllipse(int(px - HINT_ARC_DOT_R),
                             int(py - HINT_ARC_DOT_R),
                             int(2 * HINT_ARC_DOT_R),
@@ -269,7 +288,8 @@ def draw_top_capsule_badge(painter: QPainter, hint: str, w: int,
                            capsule_h: int = HINT_PILL_TOP_H,
                            top_margin: int = CAPSULE_TOP_MARGIN,
                            pill_w: int = HINT_PILL_TOP_W,
-                           long_press: bool = False) -> None:
+                           long_press: bool = False,
+                           hold_progress: float = 0.0) -> None:
     """Paint a small ABXY pill at the **top-left corner, fully inside** a control.
 
     B 策略：覆盖式绘制、不占布局。短按钮（宽 < HINT_TOP_W）走此路径，胶囊贴在
@@ -306,13 +326,14 @@ def draw_top_capsule_badge(painter: QPainter, hint: str, w: int,
     if long_press:
         # ④-C：短按钮（顶部胶囊）长按标记画在胶囊**下方**横排虚点。
         _draw_long_arc(painter, HINT_COLORS[hint], x, y, pill_w, capsule_h,
-                       side="bottom")
+                       side="bottom", hold_progress=hold_progress)
     painter.restore()
 
 
 def draw_left_capsule_badge(painter: QPainter, hint: str, h: int,
                              capsule_w: int = HINT_PILL_W, margin: int = 3,
-                             long_press: bool = False) -> None:
+                             long_press: bool = False,
+                             hold_progress: float = 0.0) -> None:
     """Paint a small ABXY pill pinned to the **left edge, vertically centred**,
     fully inside the control (never clipped).  B 策略：覆盖式绘制，不占布局，
     文字靠样式表恒定的 ``padding-left`` 让到胶囊右侧，互不重叠。
@@ -346,13 +367,14 @@ def draw_left_capsule_badge(painter: QPainter, hint: str, h: int,
     painter.drawText(x, y, capsule_w, cap_h, Qt.AlignmentFlag.AlignCenter, hint)
     if long_press:
         _draw_long_arc(painter, HINT_COLORS[hint], x, y, capsule_w, cap_h,
-                       side="right")
+                       side="right", hold_progress=hold_progress)
     painter.restore()
 
 
 def draw_right_capsule_badge(painter: QPainter, hint: str, w: int, h: int,
                              capsule_w: int = HINT_PILL_W, margin: int = 3,
-                             long_press: bool = False) -> None:
+                             long_press: bool = False,
+                             hold_progress: float = 0.0) -> None:
     """Paint a small ABXY pill pinned to the **right edge, vertically centred**,
     fully inside the control (mirror of :func:`draw_left_capsule_badge`).  B
     策略：覆盖式绘制、不占布局；用于把提示放右侧的按钮（如冻结卡片 Y = 标为
@@ -383,7 +405,7 @@ def draw_right_capsule_badge(painter: QPainter, hint: str, w: int, h: int,
     if long_press:
         # 右侧胶囊贴着按钮右缘：长按弧改包**左**缘，避免被按钮右边界裁掉。
         _draw_long_arc(painter, HINT_COLORS[hint], x, y, capsule_w, cap_h,
-                       side="left")
+                       side="left", hold_progress=hold_progress)
     painter.restore()
 
 
@@ -420,7 +442,8 @@ def choose_hint_side(w: int, text: str, fm,
 def draw_hint_auto(painter: QPainter, hint: str, w: int, h: int,
                    text: str = None,
                    wide_threshold: int = HINT_WIDE_THRESHOLD,
-                   long_press: bool = False) -> None:
+                   long_press: bool = False,
+                   hold_progress: float = 0.0) -> None:
     """Pick the capsule layout by button width — both are pills, never discs.
 
     * **Wide button** (``w >= wide_threshold``) → capsule pinned to the left
@@ -440,9 +463,11 @@ def draw_hint_auto(painter: QPainter, hint: str, w: int, h: int,
         side = "left" if w >= wide_threshold else "top"
     if side == "left":
         draw_left_capsule_badge(painter, hint, h, capsule_w=HINT_PILL_W,
-                                margin=3, long_press=long_press)
+                                margin=3, long_press=long_press,
+                                hold_progress=hold_progress)
     else:
-        draw_top_capsule_badge(painter, hint, w, long_press=long_press)
+        draw_top_capsule_badge(painter, hint, w, long_press=long_press,
+                               hold_progress=hold_progress)
 
 
 class HintButton(QPushButton):
@@ -514,6 +539,8 @@ class HintButton(QPushButton):
         # 长按标记：为 True 时在提示胶囊外侧再拖一条渐隐横条（拖尾式），
         # 用来区分「长按」与「短按」。仅影响绘制，不占布局、不改变按钮尺寸。
         self._hint_long = False
+        # 长按进度（0→1）：随按住时长增长，驱动长按虚点逐个淡出。0=静止全亮。
+        self._hint_hold_progress = 0.0
         # 完全屏蔽：为 True 时永不显示手柄提示胶囊（调用方下发任何字母都忽略），
         # 用于「快捷键」编辑按钮等明确要求取消提示的场景。
         self._hint_suppressed = False
@@ -773,6 +800,18 @@ class HintButton(QPushButton):
         self._hint_long = v
         self.update()
 
+    def set_hint_hold_progress(self, p: float) -> None:
+        """推长按进度（0→1）：驱动长按虚点随按住时长逐个淡出。
+
+        0 = 静止全亮；1 = 全部灭（长按已触发）。仅触发重绘，不碰样式表/几何。
+        与 :meth:`set_hint_long_press` 配合：先标记长按胶囊，再每帧推进度。
+        """
+        p = max(0.0, min(1.0, float(p)))
+        if abs(p - self._hint_hold_progress) < 0.01:
+            return
+        self._hint_hold_progress = p
+        self.update()
+
     def set_hint_suppressed(self, v: bool) -> None:
         """完全屏蔽手柄提示：为 True 时任何 ``set_gamepad_hint`` 调用都被忽略，
         提示胶囊永远不绘制（用于明确要求取消提示的按钮）。"""
@@ -855,17 +894,20 @@ class HintButton(QPushButton):
                 draw_right_capsule_badge(
                     p, self.gamepad_hint, self.width(), self.height(),
                     capsule_w=HINT_PILL_W, margin=3,
-                    long_press=self._hint_long)
+                    long_press=self._hint_long,
+                    hold_progress=self._hint_hold_progress)
             elif side == "top":
                 # 顶部左上角胶囊：短按钮，或长按钮文字会盖到左缘时的回退。
                 draw_top_capsule_badge(p, self.gamepad_hint, self.width(),
-                                       long_press=self._hint_long)
+                                       long_press=self._hint_long,
+                                       hold_progress=self._hint_hold_progress)
             else:
                 # 长按钮：左侧胶囊，位于预留的左边距内。
                 draw_left_capsule_badge(
                     p, self.gamepad_hint, self.height(),
                     capsule_w=HINT_PILL_W, margin=3,
-                    long_press=self._hint_long)
+                    long_press=self._hint_long,
+                    hold_progress=self._hint_hold_progress)
             p.end()
 
     def _paint_chamfer(self, ev: object) -> None:  # noqa: N802 - Qt camelCase
@@ -921,10 +963,12 @@ class HintButton(QPushButton):
                 if side == "right":
                     draw_right_capsule_badge(
                         p, self.gamepad_hint, w, h, capsule_w=HINT_PILL_W,
-                        margin=3, long_press=self._hint_long)
+                        margin=3, long_press=self._hint_long,
+                        hold_progress=self._hint_hold_progress)
                 else:
                     draw_hint_auto(p, self.gamepad_hint, w, h, text=self.text(),
-                                   long_press=self._hint_long)
+                                   long_press=self._hint_long,
+                                   hold_progress=self._hint_hold_progress)
         p.end()
 
 

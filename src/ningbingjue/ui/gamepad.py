@@ -109,6 +109,13 @@ class GamepadBackend:
     def close(self) -> None:
         pass
 
+    def rumble(self, low: int = 0x4000, high: int = 0, ms: int = 60) -> bool:
+        """Fire a one-shot haptic pulse.  No-op on backends without a motor.
+
+        Returns True if the pulse was accepted by at least one controller.
+        """
+        return False
+
 
 class MockBackend(GamepadBackend):
     """In-memory backend for tests — set :attr:`state` between polls."""
@@ -188,6 +195,7 @@ class SDLGamepadBackend(GamepadBackend):
         self._controllers: list[tuple[c_void_p, str]] = []
         self._opened: set[int] = set()
         self._has_power = False  # SDL_GameControllerGetPowerLevel available?
+        self._has_rumble = False  # SDL_GameControllerRumble available?
         self._load()
 
     def _load(self) -> None:
@@ -220,6 +228,12 @@ class SDLGamepadBackend(GamepadBackend):
                 dll.SDL_GameControllerGetPowerLevel.argtypes = [c_void_p]
                 dll.SDL_GameControllerGetPowerLevel.restype = c_int
             dll.SDL_PumpEvents.restype = None
+            # Haotics: bind the rumble symbol only when the SDL2 build exposes
+            # it (SDL >= 2.0.9).  A missing symbol must NOT break the backend.
+            self._has_rumble = hasattr(dll, "SDL_GameControllerRumble")
+            if self._has_rumble:
+                dll.SDL_GameControllerRumble.argtypes = [c_void_p, c_uint, c_uint, c_uint]
+                dll.SDL_GameControllerRumble.restype = c_int
             if dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER) != 0:
                 self._failed = True
                 return
@@ -281,6 +295,28 @@ class SDLGamepadBackend(GamepadBackend):
                     pass
         except Exception:
             pass
+
+    def rumble(self, low: int = 0x4000, high: int = 0, ms: int = 60) -> bool:
+        """Fire a one-shot haptic pulse on every connected controller.
+
+        Used for the long-press "threshold reached" feedback.  Weak by default
+        (``low=0x4000`` ≈ 1/4 strength, single ~60ms) — strong enough to feel,
+        cheap on the EC.  Returns True if at least one controller accepted the
+        pulse.  A controller without a motor simply returns -1 and is ignored.
+        """
+        if self._failed or self._sdl is None or not self._has_rumble:
+            return False
+        sdl = self._sdl
+        ok = False
+        for h, _ in self._controllers:
+            try:
+                rc = sdl.SDL_GameControllerRumble(
+                    h, c_uint(low), c_uint(high), c_uint(ms))
+                if rc == 0:
+                    ok = True
+            except Exception:
+                pass
+        return ok
 
     def poll(self) -> GamepadState:
         if self._failed or self._sdl is None:

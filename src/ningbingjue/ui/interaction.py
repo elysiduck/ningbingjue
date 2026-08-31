@@ -484,6 +484,10 @@ class InteractionController(QObject):
         self._edit_inner = False
         self._focus = -1
         self._hide_focus_rect()
+        # 退出编辑时清掉残留的长按计时与胶囊淡出进度（防止按住中切页导致进度卡住）。
+        if not active:
+            self._gp_long_press.clear()
+            self._push_hold_progress("y", 0.0)
         self.refresh()
 
     def start_gamepad(self) -> None:
@@ -1964,6 +1968,24 @@ class InteractionController(QObject):
             except Exception:
                 pass
 
+    def _push_hold_progress(self, btn: str, progress: float) -> None:
+        """把长按进度(0→1)推到对应手柄胶囊，驱动虚点逐个淡出。
+
+        仅 Y(保存) 有胶囊按钮可淡出；X(隐藏卡片) 没有对应胶囊控件，其反馈
+        走震动（在长按循环里直接调 ``self._gamepad.rumble``），这里对其忽略。
+        """
+        if btn != "y":
+            return
+        ov = self._edit_overlay
+        if ov is None:
+            return
+        sb = getattr(ov, "_save_btn", None)
+        if sb is not None and hasattr(sb, "set_hint_hold_progress"):
+            try:
+                sb.set_hint_hold_progress(progress)
+            except Exception:
+                pass
+
     def focus_card(self, token: str) -> None:
         """布局编辑页：把焦点设到指定卡片 token 对应的「整行」NavItem。
 
@@ -2230,21 +2252,35 @@ class InteractionController(QObject):
         if self._edit_mode:
             self.set_input_mode("gamepad")
             _now = time.monotonic()
+            _thr = LONG_PRESS_MS / 1000.0
             for btn in pressed:
                 if btn in ("y", "x"):
                     # 按下即计时，不立即派发（派发改到松手/长按判定处）。
                     self._gp_long_press[btn] = {"t": _now, "fired": False}
             for btn, info in list(self._gp_long_press.items()):
                 if getattr(st, btn, False):
-                    # 仍按住：满阈值则触发长按，标记已消费（防止松手再补短按）。
-                    if _now - info["t"] >= (LONG_PRESS_MS / 1000.0) \
-                            and not info["fired"]:
+                    # 仍按住
+                    if _now - info["t"] >= _thr and not info["fired"]:
+                        # 满阈值：标记已消费，进度置 1（虚点全灭=完成信号），
+                        # 发一次弱脉冲作「长按生效」确认，再派发长按动作。
                         info["fired"] = True
+                        self._push_hold_progress(btn, 1.0)
+                        if self._gamepad is not None and hasattr(
+                                self._gamepad, "rumble"):
+                            try:
+                                self._gamepad.rumble(0x4000, 0, 60)
+                            except Exception:
+                                pass
                         self._layout_long_fire(btn)
+                    else:
+                        # 未到阈值：推进度做视觉淡出（0→1 随按住时长）。
+                        _prog = min(1.0, (_now - info["t"]) / _thr)
+                        self._push_hold_progress(btn, _prog)
                 else:
                     # 已松开且未触发长按 → 视为短按（同轮 poll 内按下即松开也会走到这）。
                     if not info["fired"]:
                         self._layout_short_fire(btn)
+                    self._push_hold_progress(btn, 0.0)
                     self._gp_long_press.pop(btn, None)
 
         # Direction: stick / D-pad with repeat debounce.  Only when the app is
