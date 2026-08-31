@@ -3228,10 +3228,12 @@ class PerfMonPanel(BlockPanel):
 
     def _mk_pill(self, text):
         pill = QLabel(text)
+        pill.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        pill.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         pill.setStyleSheet(
-            "QLabel{color:#9aa6b8;background:rgba(255,255,255,0.05);"
-            "border:1px solid rgba(255,255,255,0.14);border-radius:20px;"
-            "padding:2px 9px;font-size:11px;}")
+            "QLabel{color:#9aa6b8;background-color:rgba(255,255,255,0.05);"
+            "border:1px solid rgba(255,255,255,0.14);border-radius:12px;"
+            "padding:3px 10px;font-size:11px;min-height:20px;}")
         return pill
 
     def _set_tile(self, key, text, pct=None, color=None):
@@ -3256,9 +3258,11 @@ class PerfMonPanel(BlockPanel):
             p.setText(text)
         if p.styleSheet().find(color) < 0:
             p.setStyleSheet(
-                f"QLabel{{color:{color};background:rgba(255,255,255,0.05);"
-                f"border:1px solid rgba(255,255,255,0.14);border-radius:20px;"
-                f"padding:2px 9px;font-size:11px;}}")
+                f"QLabel{{color:{color};background-color:rgba(255,255,255,0.05);"
+                f"border:1px solid rgba(255,255,255,0.14);border-radius:12px;"
+                f"padding:3px 10px;font-size:11px;min-height:20px;}}")
+            p.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            p.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
     @staticmethod
     def _fps_pct(fa, tf):
