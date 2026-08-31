@@ -45,6 +45,7 @@ from PyQt6.QtGui import (
     QPainterPath,
     QPen,
     QPixmap,
+    QRegion,
 )
 from PyQt6.QtWidgets import (
     QAbstractSpinBox,
@@ -718,12 +719,12 @@ class TileEditPanel(QWidget):
         f_bdr.addWidget(self._border_row, 1)
         tf.addLayout(f_bdr)
 
-        # 背景色：点选预设 + 自定义取色。空点=透明（默认底色）。
+        # 背景色：点选预设 + 自定义取色。透明点=默认底色（空串），用红斜线棋盘点。
         f_bg = QHBoxLayout()
         f_bg.addWidget(QLabel("背景"))
         self._bg_row = _TMPresetRow(
             _TILE_BG_PRESETS, "", self._on_bg_pick,
-            allow_empty=True, empty_label="透明（默认底色）")
+            transparent_value="", transparent_label="透明（默认底色）")
         f_bg.addWidget(self._bg_row, 1)
         tf.addLayout(f_bg)
 
@@ -7401,10 +7402,11 @@ class _TMSwitch(QCheckBox):
 
 
 class _TransparentDot(QFrame):
-    """「透明/无」预设点：画棋盘底 + 一道红色斜线便于辨认。
+    """「透明/无」预设点：画棋盘底 + 一道红色斜线便于辨认，整体裁成圆形。
 
-    纯 QSS 画不出斜线，故在 paintEvent 里自绘；选中态用 ``set_selected``
-    切换（不走 setStyleSheet，避免覆盖自绘背景）。
+    纯 QSS 画不出斜线，故在 paintEvent 里自绘；圆形用 ``setMask`` 椭圆裁剪
+    （比 paintEvent 内 ``setClipPath`` 更稳，offscreen 下 grab 也不崩）。
+    选中态用 ``set_selected`` 切换（不走 setStyleSheet，避免覆盖自绘背景）。
     """
 
     def __init__(self, selected: bool, parent: QWidget | None = None) -> None:
@@ -7412,6 +7414,10 @@ class _TransparentDot(QFrame):
         self.setFixedSize(16, 16)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._selected = bool(selected)
+        # 圆形裁剪：mask 让方角透明，与 QSS border-radius 的其余圆点一致。
+        self.setMask(QRegion(
+            self.rect().adjusted(1, 1, -1, -1),
+            QRegion.RegionType.Ellipse))
 
     def set_selected(self, v: bool) -> None:
         if self._selected != v:
@@ -7422,7 +7428,7 @@ class _TransparentDot(QFrame):
         r = self.rect()
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        # 棋盘占位底（区分于「跟随主题」灰斜纹）。
+        # 棋盘占位底（区分于「跟随主题」灰斜纹）；受 mask 裁剪为圆形。
         cell = 4
         for y in range(0, r.height(), cell):
             for x in range(0, r.width(), cell):
@@ -7432,7 +7438,7 @@ class _TransparentDot(QFrame):
         # 中间一道红色斜线（禁止/无 语义）。
         p.setPen(QPen(QColor("#ff5a5a"), 2))
         p.drawLine(r.topLeft(), r.bottomRight())
-        # 外框：选中高亮 / 未选灰边。
+        # 外框（圆）：选中高亮 / 未选灰边（mask 已裁成圆形）。
         if self._selected:
             p.setPen(QPen(QColor("#e8ecf1"), 2))
         else:
@@ -7446,16 +7452,17 @@ class _TMPresetRow(QWidget):
     ``on_pick(token)`` 回调：点预设 / 自定义取色后调用。token 为：
       - 具体色：6 位 hex（不带 #）
       - ``allow_empty`` 的空点：''（语义由 ``empty_label`` 决定，如边框=跟随主题色）
-      - ``transparent_value`` 非空时额外给一颗「透明」点：回调该值（如边框 'none'）
+      - ``transparent_value`` 非 None 时额外给一颗「透明」点：回调该值
+        （如边框 'none' / 背景 ''），点样式为棋盘底+红色斜线
     """
 
     def __init__(self, presets: list[str], cur: str,
                  on_pick: Callable[[str], None],
-                 allow_empty: bool = False,
-                 empty_label: str = "",
-                 transparent_value: str = "",
-                 transparent_label: str = "",
-                 parent: QWidget | None = None) -> None:
+        allow_empty: bool = False,
+        empty_label: str = "",
+        transparent_value: str | None = None,
+        transparent_label: str = "",
+        parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._on_pick = on_pick
         # (dot, token, kind) —— kind: 'normal' | 'empty' | 'transparent'
@@ -7488,7 +7495,7 @@ class _TMPresetRow(QWidget):
             self._empty_dot = self._make_dot("", cur == "", "empty")
             self._empty_dot.setToolTip(empty_label)
             drow.addWidget(self._empty_dot)
-        if transparent_value:
+        if transparent_value is not None:
             self._transparent_dot = self._make_dot(
                 transparent_value, cur == transparent_value, "transparent")
             self._transparent_dot.setToolTip(transparent_label)
