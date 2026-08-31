@@ -507,9 +507,10 @@ class HintButton(QPushButton):
         self._accent = "#7da2c8"
         self._active = False
         # 本按钮是否曾处于『开』态（set_style(active=True)）。
-        # ``refresh_state_style`` 用它区分「开关按钮」与「普通按钮」：只有确认
-        # 是开关按钮，套用预设后才按当前开关态补 Active*/Inactive* 变体；普通
-        # 按钮永远保持「基础外观」，与编辑器预览的『常规』态所见即所得一致。
+        # 历史上 ``refresh_state_style`` 用它区分「开关按钮」与「普通按钮」；
+        # 2026-09-01（Q1=B）起改为「预设定义了未激活/激活色就一律按当前开关态
+        # 取色」，本标记保留作兜底：稀疏预设（无 Inactive*/Active* 字段）下
+        # 仍避免把普通按钮刷成变体色。
         self._state_toggle = False
         # 基线字号（px）：预设样式表从这个值取 font-size，保证「套预设前后」
         # 字号完全一致（详见 HINT_BUTTON_FONT_PX 的注释）。
@@ -735,8 +736,19 @@ class HintButton(QPushButton):
         ``set_style(active=True)`` 过）：普通按钮继续停在「基础外观」，与按钮
         风格编辑器预览默认的『常规』态保持一致（所见即所得），避免套一次预设
         就把所有普通按钮刷成『未激活』色。
+
+        2026-09-01（用户拍板 Q1=B）：规则放宽为——只要预设定义了未激活/激活
+        色，套完预设就一律按当前开关态取色，不再要求按钮「曾切过一次」。从未
+        切过的开关按钮也能直接显示『未激活』色。代价（用户已接受）：绑定了带
+        ``Inactive*`` 预设的普通按钮在关态显示未激活色，与编辑器『常规』预览
+        的纯基础色略有出入。稀疏预设（未定义 ``InactiveBackColor`` /
+        ``ActiveBackColor``）不受影响，仍保持基础外观。
         """
-        if not self._state_toggle:
+        has_variant = (
+            getattr(self, "_bs_inactive_back", None) is not None
+            or getattr(self, "_bs_active_back", None) is not None
+        )
+        if not self._state_toggle and not has_variant:
             return
         self.set_style(self._accent, bool(self._active))
 
@@ -959,11 +971,19 @@ class HintButton(QPushButton):
         path.lineTo(0, h)
         path.lineTo(0, cs)
         path.closeSubpath()
-        # 激活态（active）且预设定义了激活色时，用激活色自绘；否则走基础色
-        # （悬浮时用悬浮色）。切角预设的「开/关」颜色由此处实时取，几何不变。
+        # 激活态（active）且预设定义了激活色时，用激活色自绘；关态且预设定义
+        # 了未激活色时用未激活色（2026-09-01 Q2=B：此前 InactiveBackColor/
+        # InactiveBorderColor 是死字段，从不被读取，现与圆角预设行为对齐）；
+        # 都未定义时走基础色（悬浮时用悬浮色）。切角预设的「开/关」颜色由此
+        # 处实时取，几何不变。
         if self._active and self._bs_active_back is not None:
             back = self._bs_active_back
             border = self._bs_active_border or self._bs_border
+            fore = self._bs_fore
+        elif (not self._active) and self._bs_inactive_back is not None:
+            back = self._bs_hover if (self._hovered and self._bs_hover) \
+                else self._bs_inactive_back
+            border = self._bs_inactive_border or self._bs_border
             fore = self._bs_fore
         else:
             back = self._bs_hover if (self._hovered and self._bs_hover) else self._bs_back
