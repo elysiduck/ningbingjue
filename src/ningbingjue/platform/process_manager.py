@@ -347,9 +347,16 @@ class Win32ProcessManager(ProcessManager):
 
     @staticmethod
     def _parse_wmic_execpath(raw: bytes) -> str:
-        """从 ``wmic ... get ExecutablePath /format:csv`` 输出里取出首个非空路径。"""
-        text = _decode_cli(raw)
-        if not text.strip():
+        """从 ``wmic ... get ExecutablePath /format:csv`` 输出里取出首个非空路径。
+
+        wmic 重定向到管道时是 UTF-16LE：解码后首行常为空白（``\\r\\r\\n`` 前缀），
+        且以 ``\\r`` 而非 ``\\n`` 换行。直接用 ``csv.DictReader`` 会把真正的表头
+        ``Node,ExecutablePath`` 误当成数据行（fieldnames 变成空列表），导致路径
+        永远取不到、自动检测失效。这里先把 ``\\r`` 统一成 ``\\n`` 并去掉首尾空行，
+        再交给 DictReader。
+        """
+        text = _decode_cli(raw).replace("\r", "\n").strip()
+        if not text:
             return ""
         try:
             reader = csv.DictReader(io.StringIO(text))
@@ -404,8 +411,8 @@ class Win32ProcessManager(ProcessManager):
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
                 timeout=25, creationflags=subprocess.CREATE_NO_WINDOW,
             ).stdout or b""
-            text = _decode_cli(raw)
-            if text.strip():
+            text = _decode_cli(raw).replace("\r", "\n").strip()
+            if text:
                 reader = csv.DictReader(io.StringIO(text))
                 for row in reader:
                     ep = (row.get("ExecutablePath") or "").strip().strip('"')
@@ -622,8 +629,8 @@ class Win32ProcessManager(ProcessManager):
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
                 timeout=20, creationflags=subprocess.CREATE_NO_WINDOW,
             ).stdout or b""
-            text = _decode_cli(raw)
-            if not text.strip():
+            text = _decode_cli(raw).replace("\r", "\n").strip()
+            if not text:
                 return []
             reader = csv.DictReader(io.StringIO(text))
             out: list[ProcessInfo] = []
@@ -650,8 +657,8 @@ class Win32ProcessManager(ProcessManager):
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False,
                 timeout=25, creationflags=subprocess.CREATE_NO_WINDOW,
             ).stdout or b""
-            text = _decode_cli(raw)
-            if not text.strip():
+            text = _decode_cli(raw).replace("\r", "\n").strip()
+            if not text:
                 return []
             reader = csv.DictReader(io.StringIO(text))
             out: list[ProcessInfo] = []
