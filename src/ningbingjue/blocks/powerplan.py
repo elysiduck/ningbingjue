@@ -80,14 +80,14 @@ def _norm_guid(guid: str) -> str:
 # 注意：GUID 以**不带花括号**的规范形态存储（见 _norm_guid）。
 # 卡片自上而下顺序即此列表顺序（预设在前、用户计划在后）：
 #   1) YMSilent      - 仅小核关睿频
-#   2) YMPerformance - 野蛮节能V17-Performance-全小核-开睿频
+#   2) YMPerformance - Performance-全小核-开睿频
 #   3) YMMedium      - 仅大核开关睿频
 # 注意：guid 与随包 .pow 文件一一对应（改名不改 guid/文件），display name 含中文
 # 语义说明，卡片直接展示该 name（与系统内部 .pow 注册名无关）。
 BUILTIN_PLANS: list[dict[str, str]] = [
     {"name": "YMSilent - 仅小核关睿频", "guid": "81833830-a9bc-11eb-82a8-a5ba27f939e5",
      "file": "YMSilent.pow"},
-    {"name": "野蛮节能V17-Performance-全小核-开睿频", "guid": "b5b141ec-902b-4343-92ba-7d92f8cf8fb5",
+    {"name": "Performance-全小核-开睿频", "guid": "b5b141ec-902b-4343-92ba-7d92f8cf8fb5",
      "file": "YMPerformance.pow"},
     {"name": "YMMedium - 仅大核开关睿频", "guid": "6231efb0-7e75-11eb-8425-e5380525389d",
      "file": "YMmedium.pow"},

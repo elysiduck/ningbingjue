@@ -2216,14 +2216,13 @@ class FreezePanel(BlockPanel):
         # and clip rows under HiDPI scaling.
         self.cand_scroll, self.cand_box, _ = _scroll_box(_HeightFitScrollArea)
         self.cand_box.setSpacing(4)
-        # 候选列表（可冻结进程）加浅灰色外框，包裹所有进程项，风格与电源计划卡片的计划列表外框一致。
+        # 候选列表（可冻结进程）外框已去除（按需求去掉浅灰色边框），仅保留透明容器包裹所有进程项。
         self.cand_frame = QFrame()
-        self.cand_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Plain)
+        self.cand_frame.setFrameStyle(QFrame.Shape.NoFrame)
         self.cand_frame.setStyleSheet(
-            "QFrame { border: 1px solid #5a6578; border-radius: 6px; "
-            "background: transparent; }")
+            "QFrame { border: none; background: transparent; }")
         _cand_fb = QVBoxLayout(self.cand_frame)
-        _cand_fb.setContentsMargins(4, 4, 4, 4)
+        _cand_fb.setContentsMargins(0, 0, 0, 0)
         _cand_fb.setSpacing(0)
         _cand_fb.addWidget(self.cand_scroll)
         self.root.addWidget(self.cand_frame)
@@ -2247,14 +2246,13 @@ class FreezePanel(BlockPanel):
         # 与候选列表同理：_FitScrollArea 防止超长进程名撑宽卡片/窗口。
         self.froz_scroll, self.froz_box, _ = _scroll_box(_HeightFitScrollArea)
         self.froz_box.setSpacing(4)
-        # 已冻结列表加浅灰色外框，包裹所有已冻结进程项，风格与电源计划卡片的计划列表外框一致。
+        # 已冻结列表外框已去除（按需求去掉浅灰色边框），仅保留透明容器包裹所有已冻结进程项。
         self.froz_frame = QFrame()
-        self.froz_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Plain)
+        self.froz_frame.setFrameStyle(QFrame.Shape.NoFrame)
         self.froz_frame.setStyleSheet(
-            "QFrame { border: 1px solid #5a6578; border-radius: 6px; "
-            "background: transparent; }")
+            "QFrame { border: none; background: transparent; }")
         _froz_fb = QVBoxLayout(self.froz_frame)
-        _froz_fb.setContentsMargins(4, 4, 4, 4)
+        _froz_fb.setContentsMargins(0, 0, 0, 0)
         _froz_fb.setSpacing(0)
         _froz_fb.addWidget(self.froz_scroll)
         self.root.addWidget(self.froz_frame)
@@ -4191,14 +4189,13 @@ class PowerPlanPanel(BlockPanel):
 
         self.scroll, self.list_box, _ = _scroll_box()
         self.scroll.setMaximumHeight(150)
-        # 计划列表加浅灰色外框（包裹所有电源计划项），不破坏滚动条样式。
+        # 计划列表外框已去除（按需求去掉浅灰色边框），仅保留透明容器包裹所有电源计划项。
         self.list_frame = QFrame()
-        self.list_frame.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Plain)
+        self.list_frame.setFrameStyle(QFrame.Shape.NoFrame)
         self.list_frame.setStyleSheet(
-            "QFrame { border: 1px solid #5a6578; border-radius: 6px; "
-            "background: transparent; }")
+            "QFrame { border: none; background: transparent; }")
         _list_fb = QVBoxLayout(self.list_frame)
-        _list_fb.setContentsMargins(4, 4, 4, 4)
+        _list_fb.setContentsMargins(0, 0, 0, 0)
         _list_fb.setSpacing(0)
         _list_fb.addWidget(self.scroll)
         self.root.addWidget(self.list_frame)
