@@ -46,39 +46,84 @@ class _SDLVersion(ctypes.Structure):
                 ("patch", ctypes.c_uint8)]
 
 
-def _find_sdl2_dll() -> str | None:
-    """与 gamepad.py:_find_sdl2_dll 完全一致：优先用 pygame 自带的 SDL2.dll。"""
+def _candidate_sdl2_dlls():
+    """按优先级 yield (label, path)，path=None 表示「退化到系统 PATH 的 SDL2」。
+
+    优先用**凝冰结魄 bundled runtime 自带的 SDL2.dll**（与生产 gamepad.py 加载的
+    是同一个文件），这样无论用户用哪个 python 解释器跑本探针，验出来的震动结果都对
+    主程序直接有效 —— 不再依赖「当前 python 能否 import pygame」。
+    """
+    here = os.path.dirname(os.path.abspath(__file__))
+    # ① bundled runtime 的 pygame（生产同款，最优先）
+    bundled = os.path.normpath(os.path.join(
+        here, "..", "runtime", "python", "Lib", "site-packages",
+        "pygame", "SDL2.dll"))
+    if os.path.exists(bundled):
+        yield ("bundled runtime 的 pygame (生产同款)", bundled)
+    # ② 当前解释器能 import 的 pygame
     try:
         import pygame  # noqa: F401
         p = os.path.join(os.path.dirname(pygame.__file__), "SDL2.dll")
         if os.path.exists(p):
-            return p
+            yield ("当前解释器的 pygame", p)
     except Exception:
         pass
-    return None
+    # ③ 系统 PATH 中的 SDL2（通常不独立存在，仅作兜底）
+    yield ("系统 PATH 中的 SDL2", None)
 
 
-def _verdict(rumble_ok: bool, has_rumble: int, physical: str) -> str:
+def _find_sdl2_dll():
+    """返回 (label, path)：优先生产同款 bundled DLL，path=None 表示退化到 PATH。"""
+    for label, path in _candidate_sdl2_dlls():
+        if path is None or os.path.exists(path):
+            return label, path
+    return "系统 PATH 中的 SDL2", None
+
+
+def _verdict(rumble_ok: bool, has_rumble: int, physical: str,
+             rumble_rc_ok: bool) -> str:
     if not rumble_ok:
         return ("VERDICT: SDL 加载/初始化失败或该手柄不可识别 → "
                 "rumble 方案在此设备上不可用，建议砍掉震动半。")
     if has_rumble == 0:
         return ("VERDICT: SDL_JoystickHasRumble == 0（SDL 报告该手柄无马达）→ "
                 "SDL 路径下 rumble 不可用。仍想做反馈就只保留视觉消失半。")
-    if physical.strip().lower() in ("n", "no", "否", "无"):
+    a = physical.strip().lower()
+    if a in ("n", "no", "否", "无"):
         return ("VERDICT: SDL 认为有马达(HasRumble==1)但物理无反应 → "
                 "GPD 固件未把马达接到 SDL 通道，rumble 实际不可用。砍掉震动半。")
-    return ("VERDICT: HasRumble==1 且物理有震动 → 阈值单次脉冲方案可行，"
-            "可接进主程序（记得 device_disable 反作弊模式下仍不可用）。")
+    if a in ("y", "yes", "是", "有"):
+        extra = ("" if rumble_rc_ok else
+                 "（注意：本次 SDL_GameControllerRumble 返回非0，但您确认有震动，"
+                 "以物理为准）")
+        return ("VERDICT: HasRumble==1 且物理有震动 → 阈值单次脉冲方案可行，"
+                "可接进主程序（记得 device_disable 反作弊模式下仍不可用）。" + extra)
+    # 空输入 / 未确认：绝不默认成功
+    rc_note = ("" if rumble_rc_ok else
+               "（本次 SDL_GameControllerRumble 返回非0，可能是下发失败，更需物理确认）")
+    return ("VERDICT: HasRumble==1（SDL 报有马达）但物理震动未确认" + rc_note +
+            " → 请在你的 GPD 真机上实跑：握住手柄、对提示输入 y/n 确认；"
+            "若毫无反应则 rumble 不可用，只留视觉半。")
 
 
 def main() -> int:
-    path = _find_sdl2_dll()
-    print(f"[1] SDL2 DLL: {path or '系统 PATH 中的 SDL2'}")
+    label, path = _find_sdl2_dll()
+    if path:
+        print(f"[1] SDL2 DLL: {label} -> {path}")
+    else:
+        print(f"[1] SDL2 DLL: {label}（将退化到裸名 CDLL('SDL2')）")
     try:
         dll = ctypes.CDLL(path) if path else ctypes.CDLL("SDL2")
     except Exception as e:  # noqa: BLE001
         print(f"[FAIL] 无法加载 SDL2: {e}")
+        print("[INFO] 本探针优先加载凝冰结魄 bundled runtime 自带的 SDL2.dll"
+              "（与生产 gamepad.py 同款）。")
+        print("       若上面 [1] 显示的是「系统 PATH 中的 SDL2」，说明没找到 bundled"
+              " DLL，请改用 bundled runtime 运行：")
+        here = os.path.dirname(os.path.abspath(__file__))
+        rt = os.path.normpath(os.path.join(here, "..", "runtime", "python",
+                                           "python.exe"))
+        print(f"         {rt}")
         print(_verdict(False, 0, ""))
         return 2
 
@@ -206,7 +251,7 @@ def main() -> int:
 
     has_rumble_overall = 1 if any(r[3] == 1 for r in reported) else 0
     print("\n" + "=" * 60)
-    print(_verdict(True, has_rumble_overall, ans))
+    print(_verdict(True, has_rumble_overall, ans, any_rumble))
     print("=" * 60)
     print("把上面的 VERDICT 行贴回对话即可，我据此决定震动半是否接进主程序。")
     return 0
