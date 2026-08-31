@@ -167,7 +167,10 @@ def _rumble(dll, h, low: int, high: int, ms: int) -> int:
           f"hi={high:#06x}) 返回 {rc} {tag}")
     return rc
 
-    if dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER) != 0:
+    print("[→] 调用 SDL_InitSubSystem(GAMECONTROLLER) …", flush=True)
+    _rc_init = dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER)
+    print(f"[✓/✗] InitSubSystem 返回 {_rc_init}", flush=True)
+    if _rc_init != 0:
         err = dll.SDL_GetError()
         print(f"[FAIL] SDL_InitSubSystem(GAMECONTROLLER) 失败: "
               f"{err.decode('utf-8', 'replace') if err else '?'}")
@@ -190,7 +193,9 @@ def _rumble(dll, h, low: int, high: int, ms: int) -> int:
         print("[WARN] SDL < 2.0.9，SDL_GameControllerRumble 可能不存在。")
         has_funcs = has_funcs and False
 
+    print("[→] 调用 SDL_NumJoysticks() …", flush=True)
     n = dll.SDL_NumJoysticks()
+    print(f"[✓] NumJoysticks 返回 {n}", flush=True)
     print(f"[3] 手柄数量 SDL_NumJoysticks = {n}")
     if n <= 0:
         print("[FAIL] 未检测到任何手柄。请先连接 GPD 内置手柄（或外接手柄）再跑。")
