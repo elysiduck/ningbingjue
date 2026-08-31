@@ -3123,7 +3123,7 @@ class PerfMonPanel(BlockPanel):
             top.toggle_perfmon_popup()
 
     def _setup(self) -> None:
-        # 标题行右侧：来源标签 + 弹出按钮
+        # 标题行右侧：弹出按钮（来源标签已移除，节省空间）
         hdr = self._hdr
         self.root.removeWidget(hdr)
         hb = QHBoxLayout()
@@ -3131,11 +3131,6 @@ class PerfMonPanel(BlockPanel):
         hb.setSpacing(6)
         hb.addWidget(hdr)
         hb.addStretch(1)
-        self._src_lbl = QLabel("—")
-        self._src_lbl.setStyleSheet(
-            "color:#5a6b7c;font-size:10px;"
-            "font-family:ui-monospace,Consolas,monospace;")
-        hb.addWidget(self._src_lbl)
         self._pop_btn = QPushButton("\u29c9")
         self._pop_btn.setFixedSize(22, 22)
         self._pop_btn.setToolTip("弹出独立监控窗口（再次点击关闭）")
@@ -3147,14 +3142,14 @@ class PerfMonPanel(BlockPanel):
         self._pop_btn.clicked.connect(self._on_popout_clicked)
         hb.addWidget(self._pop_btn)
         self.root.insertLayout(0, hb)
-        self.root.setSpacing(8)
+        self.root.setSpacing(6)
 
         # 遥测方块网格（2 列 × 4 行）
         self._tiles = {}
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setVerticalSpacing(8)
-        grid.setHorizontalSpacing(8)
+        grid.setVerticalSpacing(6)
+        grid.setHorizontalSpacing(6)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
         tile_defs = [
@@ -3177,8 +3172,8 @@ class PerfMonPanel(BlockPanel):
         # 底部控制状态药丸
         self._pills = {}
         pill_row = QHBoxLayout()
-        pill_row.setContentsMargins(0, 6, 0, 0)
-        pill_row.setSpacing(6)
+        pill_row.setContentsMargins(0, 4, 0, 0)
+        pill_row.setSpacing(5)
         for key, txt in (("load", "负载"), ("uv", "降压"), ("frame", "锁帧")):
             pill = self._mk_pill(txt)
             self._pills[key] = pill
@@ -3205,15 +3200,21 @@ class PerfMonPanel(BlockPanel):
             "QFrame#perfTile{border:1px solid rgba(255,255,255,0.10);"
             "border-radius:9px;background:rgba(255,255,255,0.03);}")
         v = QVBoxLayout(tile)
-        v.setContentsMargins(9, 7, 9, 8)
+        v.setContentsMargins(9, 5, 9, 6)
         v.setSpacing(4)
+        # 顶部一行：左标签 + 右实测值（实测值落方块右上角，方块更矮更紧凑）
+        thead = QHBoxLayout()
+        thead.setContentsMargins(0, 0, 0, 0)
+        thead.setSpacing(4)
         k = QLabel(label)
         k.setStyleSheet("color:#8b97aa;background:transparent;font-size:11px;")
-        v.addWidget(k)
+        thead.addWidget(k)
+        thead.addStretch(1)
         val = QLabel("—")
-        val.setStyleSheet("color:#dfe6f0;background:transparent;font-size:17px;"
+        val.setStyleSheet("color:#dfe6f0;background:transparent;font-size:14px;"
                          "font-family:ui-monospace,Consolas,monospace;")
-        v.addWidget(val)
+        thead.addWidget(val)
+        v.addLayout(thead)
         bar = QProgressBar()
         bar.setTextVisible(False)
         bar.setRange(0, 100)
@@ -3244,8 +3245,9 @@ class PerfMonPanel(BlockPanel):
         if val.text() != text:
             val.setText(text)
         if color and val.styleSheet().find(color) < 0:
+            fs = 15 if key == "fps" else 14
             val.setStyleSheet(
-                f"color:{color};background:transparent;font-size:17px;"
+                f"color:{color};background:transparent;font-size:{fs}px;"
                 f"font-family:ui-monospace,Consolas,monospace;")
         if pct is not None:
             bar.setValue(max(0, min(100, int(pct))))
@@ -3273,13 +3275,9 @@ class PerfMonPanel(BlockPanel):
         self.toast_label = _Label()
         self.toast_panel = _Toast(self.toast_label, self)
 
-    def _src_set(self, text, color):
-        if self._src_lbl.text() != text:
-            self._src_lbl.setText(text)
-        if self._src_lbl.styleSheet().find(color) < 0:
-            self._src_lbl.setStyleSheet(
-                f"color:{color};font-size:10px;"
-                f"font-family:ui-monospace,Consolas,monospace;")
+    def _install_toast(self) -> None:
+        self.toast_label = _Label()
+        self.toast_panel = _Toast(self.toast_label, self)
 
     def sync(self) -> None:
         win = self._win()
@@ -3294,15 +3292,6 @@ class PerfMonPanel(BlockPanel):
             s = win.perfmon_snapshot()
         except Exception:
             return
-
-        # 来源标签
-        src = s.get("fps_source")
-        if src == "HWiNFO":
-            self._src_set("HWiNFO·呈现帧率", "#5fd0ff")
-        elif src == "RTSS":
-            self._src_set("RTSS 全局", "#7fb8ff")
-        else:
-            self._src_set("无帧率源", "#5a6b7c")
 
         # 帧率实测
         fa = s.get("fps_actual")
