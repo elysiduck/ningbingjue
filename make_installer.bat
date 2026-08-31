@@ -50,6 +50,7 @@ if not "%~1"=="" (
         if "%%a"=="--exclude" set "SKIP_MENU=1"
         if "%%a"=="--exclude-all" set "SKIP_MENU=1"
         if "%%a"=="--include-all" set "SKIP_MENU=1"
+        if "%%a"=="--bundle-hwinfo" set "SKIP_MENU=1"
     )
 )
 

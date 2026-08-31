@@ -29,7 +29,6 @@ import json
 import shutil
 import subprocess
 import urllib.request
-import zipfile
 import tempfile
 
 # ---------------------------------------------------------------------------
@@ -846,6 +845,20 @@ begin
       DelTree(ConfigBackupDir, True, True, True);
   end;
 end;
+
+// 卸载时一并清理 nbj 部署的 HWiNFO（位于 LOCALAPPDATA\NingBingJue\HWiNFO）。
+// 「顺带装」则「顺带卸」；该目录不存在时 DelTree 为 no-op，绝不报错。
+procedure CurUninstallStepChanged(CurStep: TUninstallStep);
+var
+  HwiPath: string;
+begin
+  if CurStep = usPostUninstall then
+  begin
+    HwiPath := AddBackslash(ExpandConstant('{localappdata}\NingBingJue\HWiNFO'));
+    if DirExists(HwiPath) then
+      DelTree(HwiPath, True, True, True);
+  end;
+end;
 """
 
     iss = (template
@@ -898,6 +911,119 @@ def generate_unblock_bat(output_dir: str) -> str:
     return path
 
 
+# ---------------------------------------------------------------------------
+# HWiNFO 内嵌支持（--bundle-hwinfo）
+# ---------------------------------------------------------------------------
+# 与 RTSS 同构：默认不内嵌，仅用户显式 --bundle-hwinfo 时把官方 HWiNFO 便携包
+# 的 HWiNFO64.exe + 审计版 INI 放進 src/ningbingjue/vendor/HWiNFO，再由 build_exe
+# 的 NBJ_BUNDLE_HWINFO=1 打进冻结文件夹；最终由 make_installer 的 [Files] 整目录
+# 拷贝进安装包，安装后 nbj 首次运行 ensure_hwinfo() 释放到 LOCALAPPDATA。
+def prepare_hwinfo_bundle(hwinfo_src: str | None) -> bool:
+    """确保 src/ningbingjue/vendor/HWiNFO 内含 HWiNFO64.exe（审计版 INI）。
+
+    返回 True=已就绪可内嵌；False=未就绪（调用方应告警但不中止，退化为
+    「运行时引导官方下载」）。
+
+    来源优先级：
+      * vendor/HWiNFO 已有 HWiNFO64.exe → 直接复用（仅补写审计版 INI）；
+      * 否则 --hwinfo-src 指向 zip → 解压其中 HWiNFO64.exe；
+      * 否则 --hwinfo-src 指向 exe → 直接复制；
+      * 否则 → False（未提供来源且本地无）。
+    """
+    root = os.path.dirname(os.path.abspath(__file__))
+    dest = os.path.join(root, "src", "ningbingjue", "vendor", "HWiNFO")
+    exe = os.path.join(dest, "HWiNFO64.exe")
+    if os.path.isfile(exe):
+        _log(f"[bundle-hwinfo] vendor/HWiNFO 已有 HWiNFO64.exe，复用: {exe}")
+        _ensure_hwinfo_ini(dest)
+        return True
+    os.makedirs(dest, exist_ok=True)
+    if hwinfo_src:
+        src = os.path.abspath(hwinfo_src)
+        if os.path.isfile(src) and src.lower().endswith(".zip"):
+            _log(f"[bundle-hwinfo] 从 zip 解压 HWiNFO64.exe: {src}")
+            try:
+                import zipfile
+                with zipfile.ZipFile(src) as z:
+                    name = None
+                    for n in z.namelist():
+                        nl = n.lower()
+                        if nl.endswith("hwinfo64.exe") and not nl.endswith("hwinfo32.exe"):
+                            name = n
+                            break
+                    if not name:
+                        _log("[bundle-hwinfo] zip 内未找到 HWiNFO64.exe，跳过内嵌")
+                        return False
+                    data = z.read(name)
+                with open(exe, "wb") as fh:
+                    fh.write(data)
+                _log(f"[bundle-hwinfo] 已解压 HWiNFO64.exe -> {exe} ({len(data) >> 20} MB)")
+            except Exception as e:  # noqa
+                _log(f"[bundle-hwinfo] 解压失败: {e!r}，跳过内嵌")
+                return False
+        elif os.path.isfile(src) and src.lower().endswith(".exe"):
+            try:
+                shutil.copy(src, exe)
+                _log(f"[bundle-hwinfo] 已复制 HWiNFO64.exe -> {exe}")
+            except Exception as e:  # noqa
+                _log(f"[bundle-hwinfo] 复制失败: {e!r}，跳过内嵌")
+                return False
+        else:
+            _log(f"[bundle-hwinfo] --hwinfo-src 不是存在的 zip/exe: {src}")
+            return False
+    else:
+        _log("[bundle-hwinfo] 未提供 --hwinfo-src，且 vendor/HWiNFO 无 exe，跳过内嵌")
+        return False
+    _ensure_hwinfo_ini(dest)
+    return os.path.isfile(exe)
+
+
+def _ensure_hwinfo_ini(dest: str) -> bool:
+    """确保 vendor/HWiNFO 有审计版 INI（SensorsSM/SensorsOnly/MinimalizeSensors/
+    AutoUpdate 四个白名单键；绝不覆盖用户已有值）。优先复用 hwinfo_deploy 的
+    正式实现，失败则回退内联写入，避免打包期依赖异常阻断。"""
+    try:
+        root = os.path.dirname(os.path.abspath(__file__))
+        src_dir = os.path.join(root, "src")
+        if src_dir not in sys.path:
+            sys.path.insert(0, src_dir)
+        from ningbingjue.platform.hwinfo_deploy import ensure_ini as _ei
+        return bool(_ei(dest))
+    except Exception as e:  # noqa
+        _log(f"[bundle-hwinfo] 复用 hwinfo_deploy.ensure_ini 失败，回退内联: {e!r}")
+    try:
+        path = os.path.join(dest, "HWiNFO64.INI")
+        keys = {
+            "SensorsOnly": "1",
+            "MinimalizeSensors": "1",
+            "SensorsSM": "1",
+            "AutoUpdate": "0",
+        }
+        existing = {}
+        if os.path.isfile(path):
+            for line in open(path, "r", encoding="utf-8-sig", errors="replace"):
+                s = line.strip()
+                if not s or "=" not in s or s.startswith((";", "#", "[")):
+                    continue
+                k, v = s.split("=", 1)
+                existing[k.strip()] = v.strip()
+        if not os.path.isfile(path):
+            with open(path, "w", encoding="utf-8", newline="\r\n") as fh:
+                fh.write("[Settings]\r\n")
+                for k, v in keys.items():
+                    fh.write(f"{k}={v}\r\n")
+        else:
+            missing = [(k, v) for k, v in keys.items() if k not in existing]
+            if missing:
+                with open(path, "a", encoding="utf-8", newline="\r\n") as fh:
+                    for k, v in missing:
+                        fh.write(f"{k}={v}\r\n")
+        return True
+    except Exception as e:  # noqa
+        _log(f"[bundle-hwinfo] 内联写 INI 也失败: {e!r}")
+        return False
+
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(description="Build NingBingJue installer (setup.exe)")
@@ -921,6 +1047,15 @@ def main() -> int:
     parser.add_argument("--notes", default=None,
                         help="更新内容条目，分号分隔；如 \"修复风扇;新增任务列表\""
                              "。未提供时尝试用 git log 生成。")
+    parser.add_argument("--bundle-hwinfo", action="store_true",
+                        help="把 HWiNFO 官方便携包内嵌进冻结文件夹（等价于构建时设 "
+                             "NBJ_BUNDLE_HWINFO=1），安装包/安装后 nbj 会顺带部署 HWiNFO。"
+                             "需配合 --hwinfo-src 指定官方 HWiNFO64 zip/exe，或 vendor/HWiNFO "
+                             "已存在 HWiNFO64.exe。注意：HWiNFO 再分发条款需你自行核对 "
+                             "（hwinfo.com/files/license.pdf）。")
+    parser.add_argument("--hwinfo-src", default=None,
+                        help="HWiNFO 二进制来源：官方便携 zip（含 HWiNFO64.exe）或直接的 "
+                             "HWiNFO64.exe 路径。--bundle-hwinfo 时若 vendor/HWiNFO 无 exe 则从此提取。")
     args = parser.parse_args()
 
     root = os.path.dirname(os.path.abspath(__file__))
@@ -933,6 +1068,20 @@ def main() -> int:
         or (args.config_choice is not None)
     )
     with_config = bool(args.with_config) or has_exclude_cli
+
+    # 0) HWiNFO 内嵌准备（在构建之前）：设 env 透传给 build_exe，并落实二进制。
+    if getattr(args, "bundle_hwinfo", False):
+        os.environ["NBJ_BUNDLE_HWINFO"] = "1"
+        _log("步骤 0：--bundle-hwinfo 已开启 → 设 NBJ_BUNDLE_HWINFO=1")
+        if not prepare_hwinfo_bundle(getattr(args, "hwinfo_src", None)):
+            _log("【警告】HWiNFO 内嵌未就绪：vendor/HWiNFO 无 exe 且 --hwinfo-src 未"
+                 "提供/无效。安装包将【不含】HWiNFO，运行时卡片引导官方下载。")
+            _log("      （HWiNFO 再分发条款需你自行核对 hwinfo.com/files/license.pdf）")
+        else:
+            _log("HWiNFO 已就绪，将随冻结文件夹打进安装包。")
+    else:
+        # 明确关闭，避免父进程环境变量泄漏导致误内嵌。
+        os.environ.pop("NBJ_BUNDLE_HWINFO", None)
 
     # 1) 构建冻结文件夹
     if not args.no_build:

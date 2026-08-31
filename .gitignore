@@ -18,6 +18,10 @@ logs/
 launch.err
 *.lnk
 
+# ---- 内嵌 HWiNFO 二进制（打包时由 --bundle-hwinfo 从官方便携包提取，不入库）----
+src/ningbingjue/vendor/HWiNFO/HWiNFO64.exe
+src/ningbingjue/vendor/HWiNFO/HWiNFO64.INI
+
 # ---- 本机运行时配置（可再生成；真相源在 D:\备份）----
 layout.json
 rtss_config.json
