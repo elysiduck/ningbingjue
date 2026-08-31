@@ -125,9 +125,7 @@ def main(argv=None) -> int:
     rtss_src = os.path.join(root, "src", "ningbingjue", "vendor", "RTSS")
     if bundle_rtss:
         if os.path.isdir(rtss_src):
-            args_list.append(
-                _data(rtss_src, r"ningbingjue/vendor/RTSS")
-            )
+            args_list += ["--add-data", _data(rtss_src, r"ningbingjue/vendor/RTSS")]
             print(f"[build] NBJ_BUNDLE_RTSS 默认开 → 内嵌 RTSS ({rtss_src})")
         else:
             print("[build] 警告：NBJ_BUNDLE_RTSS 开启但 vendor/RTSS 不存在，跳过内嵌"
@@ -146,9 +144,7 @@ def main(argv=None) -> int:
     hwinfo_src = os.path.join(root, "src", "ningbingjue", "vendor", "HWiNFO")
     if bundle_hwinfo:
         if os.path.isdir(hwinfo_src):
-            args_list.append(
-                _data(hwinfo_src, r"ningbingjue/vendor/HWiNFO")
-            )
+            args_list += ["--add-data", _data(hwinfo_src, r"ningbingjue/vendor/HWiNFO")]
             print(f"[build] NBJ_BUNDLE_HWINFO 默认开 → 内嵌 HWiNFO ({hwinfo_src})")
         else:
             print("[build] 警告：NBJ_BUNDLE_HWINFO 开启但 vendor/HWiNFO 不存在，跳过内嵌")
