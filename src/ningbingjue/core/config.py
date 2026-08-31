@@ -805,9 +805,11 @@ class AppConfig:
     transition_ms: int = 180
     # -- 进入「页面布局编辑」的转场（HUD ↔ 编辑器全窗切换）----------------
     # 复用 ui/page_transition.py 的快照位图管线，但与卡片分页转场**独立**：
-    # 走 _open_editor / _close_editor 的 QStackedWidget 硬切，默认右侧滑入。
+    # 走 _open_editor / _close_editor 的 QStackedWidget 硬切，默认交叉溶解。
+    # 交叉溶解对 HUD↔编辑器两页的几何错位不敏感（不会像滑入那样暴露 22px
+    # 高度差导致的拉伸闪烁）；想恢复右侧滑入可在 layout.json 设 EditorTransition:"slide"。
     # 模式同样白名单化（"slide" / "fade" / "none"），任何异常降级为硬切。
-    editor_transition: str = "slide"
+    editor_transition: str = "fade"
     # 进入编辑器转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。
     editor_transition_ms: int = 180
 
@@ -902,7 +904,7 @@ class AppConfig:
             transition_ms=max(0, min(600, _coerce_int(d.get("TransitionMs", 180), 180))),
             # 进入编辑器转场（见 editor_transition 字段说明）。模式白名单处理，
             # 时长 clamp 到 [0, 600]。
-            editor_transition=_normalize_transition_mode(d.get("EditorTransition", "slide")),
+            editor_transition=_normalize_transition_mode(d.get("EditorTransition", "fade")),
             editor_transition_ms=max(0, min(600, _coerce_int(d.get("EditorTransitionMs", 180), 180))),
         )
 

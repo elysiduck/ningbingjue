@@ -4964,13 +4964,13 @@ class _OverlayWindow(QWidget):
     # 绝不卡死、绝不把页面永久盖住。设计见 ui/page_transition.py 模块文档。
 
     def _editor_transition_mode(self) -> str:
-        """进入编辑器转场模式："slide" / "fade" / "none"。读配置失败回落 slide。"""
+        """进入编辑器转场模式："slide" / "fade" / "none"。读配置失败回落 fade。"""
         try:
             cfg = self._app.config_manager.config
-            m = str(getattr(cfg, "editor_transition", "slide") or "slide").strip().lower()
+            m = str(getattr(cfg, "editor_transition", "fade") or "fade").strip().lower()
         except Exception:
-            return "slide"
-        return m if m in TRANSITION_MODES else "slide"
+            return "fade"
+        return m if m in TRANSITION_MODES else "fade"
 
     def _editor_transition_ms(self) -> int:
         """进入编辑器转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。"""
