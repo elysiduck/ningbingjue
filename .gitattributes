@@ -1,0 +1,29 @@
+# 行尾符规范化
+#
+# 背景：仓库里存的是 LF，而 Windows 工作区实际是 CRLF（core.autocrlf=false，
+# 不做任何转换）。结果 git 认为「每一行都变了」—— 一次只改 7 行的提交会
+# 产生 800 行的 diff，把真实改动彻底淹没，也没法 review。
+#
+# text=auto 让 git 在提交时把 CRLF 规范化成 LF 存入仓库（与既有历史一致），
+# 检出时再按本地习惯还原。二进制文件不会被误判；下面再显式声明一遍常见
+# 二进制类型，双保险。
+* text=auto
+
+# 明确二进制 —— 绝不参与换行转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.exe binary
+*.dll binary
+*.pyd binary
+*.pyz binary
+*.zip binary
+*.7z binary
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
