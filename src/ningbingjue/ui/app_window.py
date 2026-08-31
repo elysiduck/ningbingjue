@@ -415,7 +415,7 @@ class GamepadIcon(QWidget):
         self._name = ""
         self._power_level = 0  # SDL_JOYSTICK_POWER_* tier
         self._color = QColor(91, 227, 139)  # green until battery is known
-        self.setFixedSize(34, 18)
+        self.setFixedSize(26, 14)
         self.setCursor(Qt.CursorShape.WhatsThisCursor)
         self.setVisible(False)
 
@@ -493,6 +493,17 @@ class GamepadIcon(QWidget):
         "connected" (semantic, not the breathing-light accent).
         """
         col = self._color  # recoloured by battery tier (green -> red)
+
+        # The glyph is authored in a fixed 34x18 design space, then scaled to
+        # the widget's real (smaller) size so it stays crisp and proportional
+        # when the caller shrinks the icon (e.g. setFixedSize(26, 14)).
+        dw, dh = 34.0, 18.0
+        s = min(self.width() / dw, self.height() / dh)
+        p.save()
+        p.translate((self.width() - dw * s) / 2.0,
+                    (self.height() - dh * s) / 2.0)
+        p.scale(s, s)
+
         pen = QPen(col)
         pen.setWidthF(2.0)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -534,6 +545,8 @@ class GamepadIcon(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         for dx, dy in ((2, -1.8), (4, 0), (2, 1.8), (0, 0)):
             p.drawEllipse(QPointF(24 + dx, 6 + dy), 1.3, 1.3)
+
+        p.restore()  # undo the design-space scale/translate
 
 
 class _BatteryBar(QLabel):
@@ -1000,11 +1013,22 @@ class _OverlayWindow(QWidget):
         # disconnected -> hidden entirely to save header space.  Sits to the
         # LEFT of the battery readout per spec.  Driven by the
         # InteractionController's on_connection_changed callback.
+        # Gamepad + battery form one tight status cluster: a 3px gap keeps the
+        # connected-pad glyph right next to the device battery readout (the
+        # header's default spacing was wider).  Per spec the glyph sits LEFT of
+        # the battery.
+        status_cluster = QWidget()
+        status_layout = QHBoxLayout(status_cluster)
+        status_layout.setContentsMargins(0, 0, 0, 0)
+        status_layout.setSpacing(3)
+
         self._gp_status = GamepadIcon()
-        header.addWidget(self._gp_status)
+        status_layout.addWidget(self._gp_status)
 
         self._batt = _BatteryBar()
-        header.addWidget(self._batt)
+        status_layout.addWidget(self._batt)
+
+        header.addWidget(status_cluster)
 
         self._edit_btn = QPushButton("⚙️")
         self._edit_btn.setFlat(True)
