@@ -156,6 +156,17 @@ def main() -> int:
     dll.SDL_GameControllerClose.restype = None
     dll.SDL_GetError.restype = c_char_p
 
+
+def _rumble(dll, h, low: int, high: int, ms: int) -> int:
+    """发一次 rumble 并打印返回码 + SDL_GetError，便于区分失败原因。"""
+    rc = dll.SDL_GameControllerRumble(h, c_uint(low), c_uint(high), c_uint(ms))
+    err = dll.SDL_GetError()
+    err_s = err.decode("utf-8", "replace").strip() if err else ""
+    tag = "（已下发）" if rc == 0 else f"（失败: {err_s or '无错误串'}）"
+    print(f"       → SDL_GameControllerRumble({ms}ms, lo={low:#06x}, "
+          f"hi={high:#06x}) 返回 {rc} {tag}")
+    return rc
+
     if dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER) != 0:
         err = dll.SDL_GetError()
         print(f"[FAIL] SDL_InitSubSystem(GAMECONTROLLER) 失败: "
@@ -210,9 +221,7 @@ def main() -> int:
 
             # 发一次 400ms 强脉冲，让用户肉验
             if has_funcs:
-                rc = dll.SDL_GameControllerRumble(h, 0xFFFF, 0xFFFF, 400)
-                print(f"       → SDL_GameControllerRumble(400ms) 返回 {rc} "
-                      f"(0=已下发；非0见 SDL_GetError)")
+                rc = _rumble(dll, h, 0xFFFF, 0xFFFF, 400)
                 if rc == 0:
                     any_rumble = True
 
@@ -232,9 +241,9 @@ def main() -> int:
         for r in range(3):
             for (i, _name, h, _hr) in reported:
                 try:
-                    dll.SDL_GameControllerRumble(h, 0xFFFF, 0xFFFF, 400)
-                except Exception:  # noqa: BLE001
-                    pass
+                    _rumble(dll, h, 0xFFFF, 0xFFFF, 400)
+                except Exception as e:  # noqa: BLE001
+                    print(f"       [重发 {i}] 异常: {e}")
             time.sleep(1.0)
         try:
             ans = input("    再确认 (y/n): ").strip()
