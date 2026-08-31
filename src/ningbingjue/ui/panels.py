@@ -2944,11 +2944,28 @@ class TilePanel(BlockPanel):
     def _apply_tile_colors(self) -> None:
         r, g, b = self._accent_rgb()
         accent = Color(r, g, b)
-        for btn in self.btns:
-            # 单旋钮：磁贴内部边框也跟随呼吸灯主题色，不使用 per-tile 覆盖
-            # （border_color / bg_color 字段已废弃，全部统一为卡片强调色）。
+        tiles = self.instance.tiles if self.instance else []
+        for i, btn in enumerate(self.btns):
+            # 边框默认跟随呼吸灯主题色；背景默认用磁贴底色。
+            # 若磁贴单独设置了 border_color / bg_color，则优先用其覆盖。
             border_col = accent
             back_col = TILE_BG
+            if i < len(tiles):
+                t = tiles[i]
+                bc = getattr(t, "border_color", "") or ""
+                if bc:
+                    try:
+                        cr, cg, cb = (int(x) for x in bc.split(","))
+                        border_col = Color(cr, cg, cb)
+                    except Exception:
+                        pass
+                bgc = getattr(t, "bg_color", "") or ""
+                if bgc:
+                    try:
+                        cr, cg, cb = (int(x) for x in bgc.split(","))
+                        back_col = Color(cr, cg, cb)
+                    except Exception:
+                        pass
             btn.set_colors(
                 back_col, TILE_BG_HOVER,
                 border_col, TILE_FOCUS_BORDER,

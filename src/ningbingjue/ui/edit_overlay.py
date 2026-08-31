@@ -73,6 +73,7 @@ from PyQt6.QtWidgets import (
 
 from ..core.color import get_theme_accent
 from ..core.color.rgb import Color
+from ..core.color.palette import TILE_BG, TILE_BG_HOVER, TILE_FOCUS_BORDER
 from ..core.config import Tile
 from ..core.config import breath_speed_to_period
 from ..core import style
@@ -124,6 +125,62 @@ _NAME_COLORS = [
     ("橙", "255,220,150"),
     ("黄", "245,215,75"),
 ]
+
+# 磁贴边框/背景预设色（rrggbb，供点选）。空点（allow_empty）含义：
+# 边框 = 跟随呼吸灯主题色；背景 = 透明（用默认磁贴底色）。
+_TILE_BORDER_PRESETS = ["f25f5f", "f2a24b", "f2d24b", "7bd66b",
+                        "4bd6c8", "4b9bf2", "a86bf2", "f26bc4", "ffffff"]
+_TILE_BG_PRESETS = ["1c1f29", "2b3242", "3a2b2b", "2b3a2b",
+                    "2b3a3a", "3a2b3a", "2e2a1b", "ffffff", "000000"]
+
+
+def _rgb_str_to_hex(s: str) -> str:
+    """'255,0,0' -> 'ff0000'；空串或非法 -> ''。"""
+    s = (s or "").strip()
+    if not s:
+        return ""
+    try:
+        r, g, b = (int(x) for x in s.split(","))
+        return (f"{max(0, min(255, r)):02x}{max(0, min(255, g)):02x}"
+                f"{max(0, min(255, b)):02x}")
+    except Exception:
+        return ""
+
+
+def _hex_to_rgb_str(hx: str) -> str:
+    """'ff0000' -> '255,0,0'；空串 -> ''。"""
+    hx = (hx or "").strip().lstrip("#")
+    if not hx:
+        return ""
+    try:
+        return f"{int(hx[0:2], 16)},{int(hx[2:4], 16)},{int(hx[4:6], 16)}"
+    except Exception:
+        return ""
+
+
+def _tile_apply_colors(btn: "TileButton", t: Any, accent: Any) -> None:
+    """把磁贴的边框/背景覆盖应用到 TileButton（HUD 与编辑预览共用）。
+
+    空覆盖：边框回退呼吸灯主题色 ``accent``，背景回退默认磁贴底色
+    ``TILE_BG``；非空覆盖按 'R,G,B' 解析后生效（解析失败则沿用回退值）。
+    """
+    border_col = accent
+    back_col = TILE_BG
+    bc = getattr(t, "border_color", "") or ""
+    if bc:
+        try:
+            r, g, b = (int(x) for x in bc.split(","))
+            border_col = Color(r, g, b)
+        except Exception:
+            pass
+    bgc = getattr(t, "bg_color", "") or ""
+    if bgc:
+        try:
+            r, g, b = (int(x) for x in bgc.split(","))
+            back_col = Color(r, g, b)
+        except Exception:
+            pass
+    btn.set_colors(back_col, TILE_BG_HOVER, border_col, TILE_FOCUS_BORDER)
 
 # Card (title + frame) colour presets for the new 卡片颜色 edit item.
 # Stored as "R,G,B"; the layout editor + homepage read these to recolour the
@@ -343,6 +400,8 @@ class TileGridEditor(QWidget):
             x, y, bw, bh = self._btn_geom(col, row, w, h)
             btn.setGeometry(x, y, bw, bh)
             btn.set_selected(i == self.sel)
+            # 应用 per-tile 边框/背景覆盖，使编辑预览与 HUD 渲染一致。
+            _tile_apply_colors(btn, t, get_theme_accent())
             btn.show()
             self._tiles.append(btn)
 
@@ -646,23 +705,24 @@ class TileEditPanel(QWidget):
         f_nc.addWidget(self._name_color, 1)
         tf.addLayout(f_nc)
 
-        # Border colour override (default transparent = no border).
+        # 边框色：点选预设 + 自定义取色（空点 = 跟随呼吸灯主题色）。
         f_bdr = QHBoxLayout()
         f_bdr.addWidget(QLabel("边框"))
-        self._border_color = QLineEdit()
-        self._border_color.setPlaceholderText("R,G,B 或留空=透明")
-        self._border_color.editingFinished.connect(self._apply_border_color)
-        f_bdr.addWidget(self._border_color, 1)
+        self._border_row = _TMPresetRow(
+            _TILE_BORDER_PRESETS, "", self._on_border_pick, allow_empty=True)
+        f_bdr.addWidget(self._border_row, 1)
         tf.addLayout(f_bdr)
 
-        # Background colour override (default transparent = no background).
+        # 背景色：点选预设 + 自定义取色（空点 = 透明）。
         f_bg = QHBoxLayout()
         f_bg.addWidget(QLabel("背景"))
-        self._bg_color = QLineEdit()
-        self._bg_color.setPlaceholderText("R,G,B 或留空=透明")
-        self._bg_color.editingFinished.connect(self._apply_bg_color)
-        f_bg.addWidget(self._bg_color, 1)
+        self._bg_row = _TMPresetRow(
+            _TILE_BG_PRESETS, "", self._on_bg_pick, allow_empty=True)
+        f_bg.addWidget(self._bg_row, 1)
         tf.addLayout(f_bg)
+        # 空点含义提示（斜纹点 = 不单独设色）。
+        self._border_row._dots[0].setToolTip("跟随呼吸灯主题色")
+        self._bg_row._dots[0].setToolTip("透明（用磁贴默认底色）")
 
         # 新增磁贴：从「磁贴区块设置」卡移到此处，与「删除磁贴」同组在底部。
         self._add_tile_btn = HintButton("新增磁贴")
@@ -809,8 +869,10 @@ class TileEditPanel(QWidget):
             if self._name_color.itemData(k) == nc:
                 self._name_color.setCurrentIndex(k)
                 break
-        self._border_color.setText(getattr(t, "border_color", "") or "")
-        self._bg_color.setText(getattr(t, "bg_color", "") or "")
+        self._border_row.set_current(
+            _rgb_str_to_hex(getattr(t, "border_color", "") or ""))
+        self._bg_row.set_current(
+            _rgb_str_to_hex(getattr(t, "bg_color", "") or ""))
 
     # -- property apply (live, into the working copy) ------------------
     def _auto_save(self) -> None:
@@ -917,14 +979,18 @@ class TileEditPanel(QWidget):
             self.work[self.sel].tile_name_color = self._name_color.currentData() or "255,255,255"
             self._auto_save()
 
-    def _apply_border_color(self) -> None:
+    def _on_border_pick(self, hexv: str) -> None:
+        """点选/自定义取色后写入边框色（hex -> 'R,G,B'，空串=跟随主题）。"""
         if 0 <= self.sel < len(self.work):
-            self.work[self.sel].border_color = self._border_color.text().strip()
+            self.work[self.sel].border_color = _hex_to_rgb_str(hexv)
+            self._grid.rebuild()
             self._auto_save()
 
-    def _apply_bg_color(self) -> None:
+    def _on_bg_pick(self, hexv: str) -> None:
+        """点选/自定义取色后写入背景色（hex -> 'R,G,B'，空串=透明）。"""
         if 0 <= self.sel < len(self.work):
-            self.work[self.sel].bg_color = self._bg_color.text().strip()
+            self.work[self.sel].bg_color = _hex_to_rgb_str(hexv)
+            self._grid.rebuild()
             self._auto_save()
 
     def _browse_path(self) -> None:
@@ -1062,10 +1128,11 @@ class TileEditPanel(QWidget):
                              confirm=self._toggle_show_name))
         items.append(NavItem(self._name_color, "select",
                              confirm=lambda w=self._name_color: (w.setFocus(), w.showPopup())))
-        items.append(NavItem(self._border_color, "input",
-                             confirm=lambda w=self._border_color: w.setFocus()))
-        items.append(NavItem(self._bg_color, "input",
-                             confirm=lambda w=self._bg_color: w.setFocus()))
+        # 边框/背景色：预设点用鼠标点选；手柄导航只挂「自定义」取色按钮。
+        items.append(NavItem(self._border_row.custom_button(), "action",
+                             confirm=self._border_row._pick_custom, hint="A"))
+        items.append(NavItem(self._bg_row.custom_button(), "action",
+                             confirm=self._bg_row._pick_custom, hint="A"))
         items.append(NavItem(self._del_tile_btn, "action",
                              confirm=self._del_tile, hint="X"))
         items.append(NavItem(self._del_block_btn, "action",
