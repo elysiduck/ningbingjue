@@ -282,6 +282,7 @@ class InteractionController(QObject):
         self._gp_active: bool = False  # True after FIRST gamepad input
         self._gp_connected_prev: bool = False  # for connection-status edges
         self._gp_had_disconnect: bool = False  # a real disconnect happened since last connect
+        self._gp_power_prev: int = -1  # last SDL power tier (edge-detect recolor)
         # Rebuild guard: set True while a page / panel rebuild is deleting and
         # recreating widgets.  The 30ms gamepad poll and the keyboard handler
         # early-return while this is set, so a rebuild's delete -> create ->
@@ -317,6 +318,9 @@ class InteractionController(QObject):
         #     (driven by number keys 1..N on the keyboard).
         self.on_connection_changed: Callable[..., None] | None = None
         self.on_goto_page: Callable[[int], None] | None = None
+        #   on_gamepad_battery(level: int) -> SDL power tier changed; the HUD
+        #     recolours the gamepad glyph green -> red.  Fires only on change.
+        self.on_gamepad_battery: Callable[..., None] | None = None
         # Fired when the focused feature card (panel) changes on the main page
         # (old_panel, new_panel).  The host uses it to dismiss a per-card help
         # popup so it never lingers after the user moves to another card.
@@ -2071,6 +2075,17 @@ class InteractionController(QObject):
             return
         st = self._gamepad.poll()
 
+        # Battery-tier edge -> recolor the HUD glyph (green -> red).  Fired only
+        # when the SDL power tier changes, so a connected pad never repaints on
+        # every 33 ms poll.
+        if st.power_level != self._gp_power_prev:
+            self._gp_power_prev = st.power_level
+            if self.on_gamepad_battery is not None:
+                try:
+                    self.on_gamepad_battery(st.power_level)
+                except Exception:
+                    pass
+
         # Connection-status edge -> notify the host (HUD indicator / tray).
         if st.connected != self._gp_connected_prev:
             self._gp_connected_prev = st.connected
@@ -2088,7 +2103,7 @@ class InteractionController(QObject):
             self._gp_had_disconnect = False
             if self.on_connection_changed is not None:
                 try:
-                    self.on_connection_changed(st.connected, st.name or "")
+                    self.on_connection_changed(st.connected, st.name or "", st.power_level)
                 except Exception:
                     pass
 

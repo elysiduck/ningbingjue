@@ -413,20 +413,67 @@ class GamepadIcon(QWidget):
         super().__init__(parent)
         self._connected = False
         self._name = ""
+        self._power_level = 0  # SDL_JOYSTICK_POWER_* tier
+        self._color = QColor(91, 227, 139)  # green until battery is known
         self.setFixedSize(34, 18)
         self.setCursor(Qt.CursorShape.WhatsThisCursor)
         self.setVisible(False)
 
-    def set_state(self, connected: bool, name: str = "") -> None:
+    def set_state(self, connected: bool, name: str = "", battery: int = 0) -> None:
         self._connected = connected
         self._name = name or ""
-        self.setToolTip(
-            f"手柄: 已连接 ({self._name})" if (connected and self._name)
-            else "手柄: 已连接" if connected
-            else "手柄: 未检测到（可用键盘）")
+        self._power_level = battery
+        self._color = self._battery_color(battery)
+        self.setToolTip(self._tooltip())
         # Save space: only occupy the header when a pad is actually present.
         self.setVisible(connected)
         self.update()
+
+    def set_battery(self, level: int) -> None:
+        """Recolor the glyph to the SDL power tier (green -> red) without
+        touching visibility.  No-op when the tier is unchanged, so a connected
+        pad never repaints on every 33 ms poll."""
+        if level == self._power_level:
+            return
+        self._power_level = level
+        self._color = self._battery_color(level)
+        self.setToolTip(self._tooltip())
+        self.update()
+
+    @staticmethod
+    def _battery_color(level: int) -> QColor:
+        """Map an SDL_JOYSTICK_POWER_* tier to the glyph colour.
+
+        Green = full / wired / unknown (assume ok); ramps through amber and
+        orange to red as the pad drains.  The HUD thus shows battery at a
+        glance with no text (per the no-text-container decision).
+        """
+        ramp = {
+            0: (91, 227, 139),    # unknown -> green (keep old "connected" look)
+            1: (229, 72, 72),     # empty  -> red
+            2: (230, 150, 70),    # low    -> orange
+            3: (214, 200, 90),    # medium -> amber
+            4: (91, 227, 139),    # full   -> green
+            5: (91, 227, 139),    # wired  -> green
+        }
+        r, g, b = ramp.get(level, (91, 227, 139))
+        return QColor(r, g, b)
+
+    def _tooltip(self) -> str:
+        labels = {
+            0: "电量未知",
+            1: "电量: 空",
+            2: "电量: 低",
+            3: "电量: 中",
+            4: "电量: 满",
+            5: "有线供电",
+        }
+        batt = labels.get(self._power_level, "电量未知")
+        if self._connected and self._name:
+            return f"手柄: 已连接 ({self._name}) · {batt}"
+        if self._connected:
+            return f"手柄: 已连接 · {batt}"
+        return "手柄: 未检测到（可用键盘）"
 
     def paintEvent(self, ev: Any) -> None:  # noqa: D401 - Qt override
         if not self._connected:
@@ -445,7 +492,7 @@ class GamepadIcon(QWidget):
         centre valley) — matches the redesigned HTML mockup.  Fixed green =
         "connected" (semantic, not the breathing-light accent).
         """
-        col = QColor(91, 227, 139)  # clear "connected" green
+        col = self._color  # recoloured by battery tier (green -> red)
         pen = QPen(col)
         pen.setWidthF(2.0)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
@@ -1196,6 +1243,7 @@ class _OverlayWindow(QWidget):
         self._controller.on_prev_page = lambda: self._app.switch_page(-1)
         self._controller.on_next_page = lambda: self._app.switch_page(1)
         self._controller.on_connection_changed = self._on_gp_connection_changed
+        self._controller.on_gamepad_battery = self._on_gp_battery
         # 主页面：焦点切换到另一个功能卡片时，关闭已打开的疑惑解答弹窗。
         self._controller.on_card_focus_change = self._on_card_focus_changed
         # Shell gamepad actions: Select toggles the layout editor, Start focuses
@@ -4858,23 +4906,32 @@ class _OverlayWindow(QWidget):
         except Exception:
             pass
 
-    def _on_gp_connection_changed(self, connected: bool, name: str) -> None:
+    def _on_gp_connection_changed(self, connected: bool, name: str, battery: int = 0) -> None:
         """Update the header gamepad-status icon + tray tooltip when a
         controller connects / disconnects (driven by the SDL backend's hot-plug
-        detection).  The header shows a compact glyph (green when connected,
-        hidden when detached); the full status lives in the tray tooltip."""
+        detection).  The header shows a compact glyph whose colour encodes
+        battery (green -> red); it is hidden when detached."""
         tip = (f"凝冰结魄 — 手柄: 已连接 ({name})" if (connected and name)
                else "凝冰结魄 — 手柄: 已连接" if connected
                else "凝冰结魄 — 手柄: 未检测到（可用键盘）")
         if getattr(self, "_gp_status", None) is not None:
             try:
-                self._gp_status.set_state(connected, name)
+                self._gp_status.set_state(connected, name, battery)
             except Exception:
                 pass
         tray = getattr(self, "_tray", None)
         if tray is not None:
             try:
                 tray.setToolTip(tip)
+            except Exception:
+                pass
+
+    def _on_gp_battery(self, level: int) -> None:
+        """Recolor the header glyph when the SDL power tier changes (green ->
+        red).  Visibility is owned by ``_on_gp_connection_changed``."""
+        if getattr(self, "_gp_status", None) is not None:
+            try:
+                self._gp_status.set_battery(level)
             except Exception:
                 pass
 

@@ -74,6 +74,9 @@ class GamepadState:
     # Left thumb-stick, raw -32768..32767 (0 when centered).
     lx: int = 0
     ly: int = 0
+    # Battery tier (SDL_JOYSTICK_POWER_*); 0 = unknown / n/a.  The HUD recolours
+    # the gamepad glyph green -> red from this.  Wired pads report WIRED (5).
+    power_level: int = 0
 
     def direction(self) -> tuple[int, int]:
         """Return ``(dx, dy)`` where each component is -1 / 0 / 1 (screen coords:
@@ -146,6 +149,15 @@ _BTN = {
 _AXIS_LX = 0
 _AXIS_LY = 1
 
+# SDL_JoystickPowerLevel enum (returned by SDL_GameControllerGetPowerLevel).
+# The HUD maps these tiers to a green -> red colour ramp, so no extra strings.
+SDL_JOYSTICK_POWER_UNKNOWN = 0
+SDL_JOYSTICK_POWER_EMPTY = 1
+SDL_JOYSTICK_POWER_LOW = 2
+SDL_JOYSTICK_POWER_MEDIUM = 3
+SDL_JOYSTICK_POWER_FULL = 4
+SDL_JOYSTICK_POWER_WIRED = 5
+
 
 def _find_sdl2_dll() -> Optional[str]:
     """Locate the SDL2 DLL bundled with pygame (preferred), else None to let
@@ -175,6 +187,7 @@ class SDLGamepadBackend(GamepadBackend):
         self._sdl: Optional[ctypes.CDLL] = None
         self._controllers: list[tuple[c_void_p, str]] = []
         self._opened: set[int] = set()
+        self._has_power = False  # SDL_GameControllerGetPowerLevel available?
         self._load()
 
     def _load(self) -> None:
@@ -200,6 +213,12 @@ class SDLGamepadBackend(GamepadBackend):
             dll.SDL_GameControllerName.restype = c_char_p
             dll.SDL_GameControllerGetAttached.argtypes = [c_void_p]
             dll.SDL_GameControllerGetAttached.restype = c_int
+            # Power level is optional: an SDL2 build without this symbol must
+            # NOT break the whole backend, so only bind it when present.
+            self._has_power = hasattr(dll, "SDL_GameControllerGetPowerLevel")
+            if self._has_power:
+                dll.SDL_GameControllerGetPowerLevel.argtypes = [c_void_p]
+                dll.SDL_GameControllerGetPowerLevel.restype = c_int
             dll.SDL_PumpEvents.restype = None
             if dll.SDL_InitSubSystem(_SDL_INIT_GAMECONTROLLER) != 0:
                 self._failed = True
@@ -275,6 +294,14 @@ class SDLGamepadBackend(GamepadBackend):
             sel = stt = dup = ddown = dleft = dright = False
             lx = ly = 0
             name = ""
+            # Battery tier (green -> red in the HUD).  Guarded by _has_power so
+            # a missing symbol never breaks the backend; read from the first pad.
+            power = 0
+            if self._has_power and self._controllers:
+                try:
+                    power = int(sdl.SDL_GameControllerGetPowerLevel(self._controllers[0][0]))
+                except Exception:
+                    power = 0
             for h, nm in self._controllers:
                 try:
                     a |= bool(sdl.SDL_GameControllerGetButton(h, _BTN["a"]))
@@ -307,7 +334,7 @@ class SDLGamepadBackend(GamepadBackend):
                 a=a, b=b, x=x, y=y, l3=l3, r3=r3, lb=lb, rb=rb,
                 select=sel, start=stt,
                 dpad_up=dup, dpad_down=ddown, dpad_left=dleft, dpad_right=dright,
-                lx=lx, ly=ly,
+                lx=lx, ly=ly, power_level=power,
             )
         except Exception:
             return GamepadState()
