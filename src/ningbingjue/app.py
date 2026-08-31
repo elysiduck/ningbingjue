@@ -174,13 +174,16 @@ _SHIM_MAP: dict[str, dict[str, str]] = {
 _PUBLIC_MAP: dict[str, dict[str, str]] = {
     "freeze": {
         "Handle-FreezeHotkey": "handle_hotkey",
-        # 原先这里还挂着 ``"Handle-FreezeEnter": "on_item_confirm"``，但
-        # FreezeBlock 根本没有 ``on_item_confirm`` 方法（Phase 2 焦点系统
-        # 只留了 ``on_activate_item`` / ``on_deactivate_item``）。任何走这个
-        # shim 的调用都会 AttributeError —— 而调用方通常把它包在 try 里，
-        # 表现就是「按了没反应、也不报错」。Enter / A 的确认已统一由
-        # InteractionController 分发（见 FreezePanel.nav_items 的 confirm），
-        # 这条死映射直接删除，避免后来人误以为还有第二条入口。
+        # 待实现（已标 xfail 留档）：``on_item_confirm`` 属于被取代的旧
+        # headless 导航契约，**全项目尚无任何 block 实现它**
+        # （``grep "def on_item_confirm" src/`` 结果为空；``on_navigate`` 也
+        # 只有 power.py 一家有）。Phase 2 之后焦点由 InteractionController
+        # 统一接管，GUI 根本不更新 block 的 focus_idx，所以这条路径目前
+        # 没有调用方。
+        # 留着映射是安全的：_wire_shims 用 ``getattr(block, name, None)``
+        # 取值，方法不存在时该 shim 不注册，不会崩也不会有副作用；等真要
+        # 做 headless 驱动时补上方法即可自动生效。
+        "Handle-FreezeEnter": "on_item_confirm",
     },
     "procmon": {
         "Toggle-ProcMonScript": "toggle_config",

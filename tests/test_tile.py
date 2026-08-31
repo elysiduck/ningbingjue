@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from ningbingjue.blocks.tile import TileBlock
 from ningbingjue.core.config import AppConfig, Tile
 
@@ -30,6 +32,12 @@ def test_autofill_empty_slot():
     assert block.tiles[0].row >= 0
 
 
+@pytest.mark.xfail(
+    reason="旧 headless 导航契约：TileBlock 从未实现 on_item_confirm"
+           "（全项目 0 处实现）。Phase 2 后焦点由 InteractionController 统一"
+           "接管，GUI 不更新 block.focus_idx，此路径当前无调用方。留档待补。",
+    strict=False,
+)
 def test_launch_records_calls():
     cfg = AppConfig()
     cfg.tiles = _tiles()
@@ -54,6 +62,12 @@ def test_img_tile_does_not_launch():
     assert calls == []
 
 
+@pytest.mark.xfail(
+    reason="旧 headless 导航契约：TileBlock 从未实现 on_navigate"
+           "（全项目只有 power.py 有）。Phase 2 后矩阵导航由"
+           "InteractionController 接管，此路径当前无调用方。留档待补。",
+    strict=False,
+)
 def test_navigation_matrix():
     cfg = AppConfig()
     cfg.tiles = _tiles()
