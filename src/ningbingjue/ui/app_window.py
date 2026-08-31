@@ -1242,6 +1242,15 @@ class _OverlayWindow(QWidget):
         # 重建守卫 / 手柄轮询的复位延期到动画结束，避免 30ms 轮询在转场期间
         # 去导航一张用户看不见的页面。
         self._transition_active: bool = False
+        # 独立状态：进入「页面布局编辑」的转场（HUD ↔ 编辑器全窗切换）。
+        # 与上方卡片分页转场**完全独立**，共用 TransitionVeil / PageTransition
+        # 与两阶段盖罩时序，但用各自的状态，互不干扰（见 _open_editor /
+        # _close_editor 与 _arm_editor_transition / _run_editor_transition）。
+        self._editor_transition: Any = None       # PageTransition（编辑器转场驱动器）
+        self._editor_veil: Any = None             # TransitionVeil（编辑器转场覆盖层）
+        self._editor_old_snapshot: Any = None     # 旧屏快照 QPixmap（HUD 或编辑器）
+        self._editor_transition_dir: int = 1      # +1 编辑器从右进 / -1 编辑器向右出
+        self._editor_transition_active: bool = False
         self._rebuild_deferred_ctrl: Any = None
         self._rebuild_deferred_gp: bool = False
         self._hud_signature_open: Optional[str] = None
@@ -4948,6 +4957,163 @@ class _OverlayWindow(QWidget):
         except Exception:
             pass
 
+    # -- 进入「页面布局编辑」的转场（HUD ↔ 编辑器全窗切换）----------------
+    # 与上方卡片分页转场**完全独立**：单独的状态 + 单独的盖罩/驱动器，复用
+    # 同一套 TransitionVeil / PageTransition 与两阶段盖罩时序。任何异常一律
+    # 静默降级为现有硬切（_open_editor / _close_editor 本来就切好了页面），
+    # 绝不卡死、绝不把页面永久盖住。设计见 ui/page_transition.py 模块文档。
+
+    def _editor_transition_mode(self) -> str:
+        """进入编辑器转场模式："slide" / "fade" / "none"。读配置失败回落 slide。"""
+        try:
+            cfg = self._app.config_manager.config
+            m = str(getattr(cfg, "editor_transition", "slide") or "slide").strip().lower()
+        except Exception:
+            return "slide"
+        return m if m in TRANSITION_MODES else "slide"
+
+    def _editor_transition_ms(self) -> int:
+        """进入编辑器转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。"""
+        try:
+            cfg = self._app.config_manager.config
+            ms = int(getattr(cfg, "editor_transition_ms", DEFAULT_TRANSITION_MS))
+        except Exception:
+            return DEFAULT_TRANSITION_MS
+        return max(0, min(600, ms))
+
+    def _arm_editor_transition(self, direction: int) -> None:
+        """进入/退出编辑器前：抓「旧屏」快照并铺盖罩（旧屏仍完整可见时调用）。
+
+        direction = +1：从 HUD 进入编辑器（编辑器从右滑入）；
+        direction = -1：从编辑器退回 HUD（编辑器向右滑出、HUD 从左滑入）。
+        抓到快照后立刻铺盖罩，使随后的 QStackedWidget 硬切发生在盖罩之下，
+        避免「先闪一下新屏、再播动画」的时序伪影（与 _arm_page_transition 同源）。
+        """
+        self._editor_old_snapshot = None
+        self._editor_transition_dir = 1 if direction >= 0 else -1
+        mode = self._editor_transition_mode()
+        if mode == "none" or self._editor_transition_ms() <= 0:
+            return
+        if getattr(self, "_editor_transition_active", False):
+            # 上一次编辑器转场还在进行：先拆干净再开新的，避免两个盖罩叠加。
+            self._finish_editor_transition()
+        try:
+            old_pm = self._grab_page_snapshot()
+        except Exception:
+            old_pm = None
+        if old_pm is None:
+            return
+        rect = self._page_viewport_rect()
+        if rect is None:
+            return
+        self._editor_old_snapshot = old_pm
+        self._teardown_editor_veil()
+        try:
+            veil = TransitionVeil(self, mode, old_pm, None, self._editor_transition_dir)
+            veil.setGeometry(rect)
+            veil.raise_()
+            veil.show()
+            veil.repaint()
+            self._editor_veil = veil
+        except Exception:
+            self._editor_old_snapshot = None
+            return
+        # 置位「转场意图」+ 保底定时器：即使动画回调丢失也不会让盖罩永久置位。
+        self._editor_transition_active = True
+        QTimer.singleShot(self._editor_transition_ms() + SAFETY_MARGIN_MS,
+                          self._editor_transition_safety)
+
+    def _run_editor_transition(self, direction: int) -> None:
+        """抓「新屏」快照 + 起动画。任何异常静默降级为硬切（清场）。
+
+        direction 与 _arm_editor_transition 一致：+1 进入 / -1 退出。
+        时序：① 隐藏盖罩 → ② 抓新屏快照 → ③ 补回同一盖罩并重新显示 → ④ 起动画。
+        ①②③ 同步完成，中间不经过事件循环，不会被合成出「新屏真身」的一帧。
+        """
+        old_pm = getattr(self, "_editor_old_snapshot", None)
+        self._editor_old_snapshot = None
+        started = False
+        try:
+            if old_pm is None or old_pm.isNull():
+                raise RuntimeError("no editor old snapshot")
+            mode = self._editor_transition_mode()
+            rect = self._page_viewport_rect()
+            if mode == "none" or rect is None or not self.isVisible():
+                raise RuntimeError("editor transition disabled")
+            veil = getattr(self, "_editor_veil", None)
+            if veil is not None:
+                try:
+                    veil._direction = 1 if direction >= 0 else -1
+                except Exception:
+                    pass
+                veil.hide()
+            # 强制布局先落定：_open_editor / _close_editor 只切了 stacked widget，
+            # 布局要等事件循环才重算；不激活就抓可能得到尚未布局的页面。
+            try:
+                lay = getattr(self, "inner_layout", None)
+                if lay is not None:
+                    lay.activate()
+            except Exception:
+                pass
+            new_pm = self._grab_page_snapshot()
+            if new_pm is None:
+                raise RuntimeError("no editor new snapshot")
+            if veil is None:
+                # 兜底：盖罩缺失（被并发 finish 掉）时现建一个。
+                veil = TransitionVeil(self, mode, old_pm, new_pm,
+                                      1 if direction >= 0 else -1)
+                veil.setGeometry(rect)
+                self._editor_veil = veil
+            else:
+                veil.set_new_pixmap(new_pm)
+            veil.raise_()
+            veil.show()
+            if self._editor_transition is None:
+                self._editor_transition = PageTransition(self)
+                self._editor_transition.finished.connect(
+                    self._on_editor_transition_finished)
+            self._editor_transition.start(veil, self._editor_transition_ms())
+            started = True
+        except Exception:
+            started = False
+        if not started:
+            # 走到这里说明转场没能起来（或中途抛异常）：必须拆掉盖罩。
+            # 少了这一步，页面会被旧屏快照**永久**盖住。
+            self._finish_editor_transition()
+
+    def _teardown_editor_veil(self) -> None:
+        """销毁编辑器转场覆盖层并立刻释放快照（每张约 3MB）。"""
+        veil = getattr(self, "_editor_veil", None)
+        self._editor_veil = None
+        if veil is None:
+            return
+        try:
+            veil.release_pixmaps()
+            veil.hide()
+            veil.setParent(None)
+            veil.deleteLater()
+        except Exception:
+            pass
+
+    def _finish_editor_transition(self) -> None:
+        """编辑器转场收尾：拆覆盖层 + 释放位图 + 复位守卫。"""
+        self._editor_transition_active = False
+        tr = getattr(self, "_editor_transition", None)
+        if tr is not None:
+            try:
+                tr.stop()
+            except Exception:
+                pass
+        self._teardown_editor_veil()
+
+    def _on_editor_transition_finished(self) -> None:
+        self._finish_editor_transition()
+
+    def _editor_transition_safety(self) -> None:
+        """保底：动画回调万一丢失，强制收尾（盖罩绝不能永久置位）。"""
+        if getattr(self, "_editor_transition_active", False):
+            self._finish_editor_transition()
+
     def _on_gp_connection_changed(self, connected: bool, name: str, battery: int = 0) -> None:
         """Update the header gamepad-status icon + tray tooltip when a
         controller connects / disconnects (driven by the SDL backend's hot-plug
@@ -5179,6 +5345,11 @@ class _OverlayWindow(QWidget):
         if faq is not None:
             faq.close()
         self._hud_signature_open = self._compute_hud_signature()
+        # --- 进入编辑器转场（方案1：右侧滑入）---------------------------
+        # 在旧屏（HUD）仍完整可见时抓快照并铺盖罩，随后 QStackedWidget 硬切
+        # 发生在盖罩之下；切到编辑器后再抓新屏补进同一盖罩并起动画。复用
+        # ui/page_transition.py 的两阶段盖罩时序，任何异常静默降级为硬切。
+        self._arm_editor_transition(1)
         self._edit_overlay.open_layout()
         self._body.setCurrentWidget(self._edit_overlay)
         self._controller.set_edit_mode(True)
@@ -5187,12 +5358,22 @@ class _OverlayWindow(QWidget):
         # Hide the HUD page indicator bar so its [1][2]… buttons don't show
         # through the editor overlay.
         self._apply_page_bar_visibility()
+        # 延迟到下一 tick：让编辑器布局落定、完成一次绘制后再抓新屏快照起动画。
+        if getattr(self, "_editor_old_snapshot", None) is not None:
+            QTimer.singleShot(0, lambda: self._run_editor_transition(1))
 
     def _close_editor(self) -> None:
         """Return to the HUD, reflecting any layout / theme changes."""
         # Drop the all-pages mode (set while the button-style editor was open)
         # so the HUD returns to showing only the current page's cards.
         self._editor_all_pages = False
+        # 是否真的从编辑器退回（避免非编辑器态误触发转场）。
+        was_edit = bool(getattr(self._controller, "_edit_mode", False))
+        # --- 退出编辑器转场（方案1：编辑器向右滑出、HUD 从左滑入）--------
+        # 先抓旧屏（编辑器）快照铺盖罩；随后切回 HUD（发生在盖罩之下）；
+        # 切回后再抓 HUD 补进同一盖罩并起反向滑动。
+        if was_edit:
+            self._arm_editor_transition(-1)
         # 结构/主题未变 → 复用缓存面板直接返回（不拆不建），消除退出卡顿；
         # 变了才走真正的 rebuild()。比对维度见 _compute_hud_signature。
         if self._compute_hud_signature() == self._hud_signature_open:
@@ -5206,6 +5387,9 @@ class _OverlayWindow(QWidget):
         self._controller.set_edit_mode(False)
         self._controller.set_host(self.inner)
         self._apply_page_bar_visibility()
+        # 延迟到下一 tick 抓新屏（HUD）快照并起动画。
+        if was_edit and getattr(self, "_editor_old_snapshot", None) is not None:
+            QTimer.singleShot(0, lambda: self._run_editor_transition(-1))
 
     def _compute_hud_signature(self) -> str:
         """结构签名：页面结构 + 主题色 + 呼吸色。

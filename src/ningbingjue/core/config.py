@@ -803,6 +803,13 @@ class AppConfig:
     page_transition: str = "slide"
     # 转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。
     transition_ms: int = 180
+    # -- 进入「页面布局编辑」的转场（HUD ↔ 编辑器全窗切换）----------------
+    # 复用 ui/page_transition.py 的快照位图管线，但与卡片分页转场**独立**：
+    # 走 _open_editor / _close_editor 的 QStackedWidget 硬切，默认右侧滑入。
+    # 模式同样白名单化（"slide" / "fade" / "none"），任何异常降级为硬切。
+    editor_transition: str = "slide"
+    # 进入编辑器转场时长（ms），clamp 到 [0, 600]。0 = 关闭动画。
+    editor_transition_ms: int = 180
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "AppConfig":
@@ -893,6 +900,10 @@ class AppConfig:
             # 页面转场（见上方 _page_transition 的白名单处理）。
             page_transition=_page_transition,
             transition_ms=max(0, min(600, _coerce_int(d.get("TransitionMs", 180), 180))),
+            # 进入编辑器转场（见 editor_transition 字段说明）。模式白名单处理，
+            # 时长 clamp 到 [0, 600]。
+            editor_transition=_normalize_transition_mode(d.get("EditorTransition", "slide")),
+            editor_transition_ms=max(0, min(600, _coerce_int(d.get("EditorTransitionMs", 180), 180))),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -947,6 +958,8 @@ class AppConfig:
             "CardOuterMargin": max(0, int(self.card_outer_margin)),
             "PageTransition": _normalize_transition_mode(self.page_transition),
             "TransitionMs": max(0, min(600, int(getattr(self, "transition_ms", 180)))),
+            "EditorTransition": _normalize_transition_mode(self.editor_transition),
+            "EditorTransitionMs": max(0, min(600, int(getattr(self, "editor_transition_ms", 180)))),
             "Input": self.input_config.to_dict(),
         }
 
