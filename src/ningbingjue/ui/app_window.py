@@ -5006,7 +5006,6 @@ class _OverlayWindow(QWidget):
         self._editor_old_snapshot = None
         self._editor_transition_dir = 1 if direction >= 0 else -1
         mode = self._editor_transition_mode()
-        self._et_dbg("ARM mode=%s ms=%s active_before=%s" % (mode, self._editor_transition_ms(), getattr(self, "_editor_transition_active", False)))
         if mode == "none" or self._editor_transition_ms() <= 0:
             return
         if getattr(self, "_editor_transition_active", False):
@@ -5016,15 +5015,12 @@ class _OverlayWindow(QWidget):
             old_pm = self._grab_page_snapshot()
         except Exception:
             old_pm = None
-        self._et_dbg("ARM snapshot None=%s" % (old_pm is None))
         if old_pm is None:
             return
         rect = self._page_viewport_rect()
-        self._et_dbg("ARM rect None=%s" % (rect is None))
         if rect is None:
             return
         self._editor_old_snapshot = old_pm
-        self._et_dbg("ARM armed ok")
         self._teardown_editor_veil()
         try:
             veil = TransitionVeil(self, mode, old_pm, None, self._editor_transition_dir)
@@ -5050,7 +5046,6 @@ class _OverlayWindow(QWidget):
         """
         old_pm = getattr(self, "_editor_old_snapshot", None)
         self._editor_old_snapshot = None
-        self._et_dbg("RUN enter old_present=%s" % (old_pm is not None))
         started = False
         try:
             if old_pm is None or old_pm.isNull():
@@ -5075,7 +5070,6 @@ class _OverlayWindow(QWidget):
             except Exception:
                 pass
             new_pm = self._grab_page_snapshot()
-            self._et_dbg("RUN new None=%s" % (new_pm is None))
             if new_pm is None:
                 raise RuntimeError("no editor new snapshot")
             if veil is None:
@@ -5094,7 +5088,6 @@ class _OverlayWindow(QWidget):
                     self._on_editor_transition_finished)
             self._editor_transition.start(veil, self._editor_transition_ms())
             started = True
-            self._et_dbg("RUN started mode=%s ms=%s" % (mode, self._editor_transition_ms()))
         except Exception:
             started = False
         if not started:
@@ -5129,15 +5122,6 @@ class _OverlayWindow(QWidget):
 
     def _on_editor_transition_finished(self) -> None:
         self._finish_editor_transition()
-
-    # --- 临时调试：定位编辑器转场为何不显示（确认后删除）--------------
-    def _et_dbg(self, msg: str) -> None:
-        try:
-            with open("C:/Users/13567/WorkBuddy/2026-07-18-10-22-49/ningbingjue/_editor_transition_dbg.txt",
-                      "a", encoding="utf-8") as _f:
-                _f.write(msg + "\n")
-        except Exception:
-            pass
 
     def _editor_transition_safety(self) -> None:
         """保底：动画回调万一丢失，强制收尾（盖罩绝不能永久置位）。"""
@@ -5366,7 +5350,6 @@ class _OverlayWindow(QWidget):
     # -- layout editor (in-window overlay) ---------------------------
     def _open_editor(self) -> None:
         """Toggle the full-window edit overlay (F2)."""
-        self._et_dbg("OPEN enter edit_mode=%s" % getattr(self._controller, "_edit_mode", None))
         if self._controller._edit_mode:
             self._close_editor()
             return
