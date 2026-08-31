@@ -174,6 +174,43 @@ def _probe_pid(pid: int) -> "tuple[int, float] | None":
         return None
 
 
+def _exe_of_pid(pid: int) -> str:
+    """返回 ``pid`` 对应进程的可执行文件**完整路径**；取不到返回空串。
+
+    修「装在非标准路径的 HWiNFO 检测不到」的关键：拿到进程后直接反问 OS
+    「你的 exe 在哪」，比 ``system_hwinfo_dir()`` 的目录猜测靠谱得多，
+    同时给出版本读取的**真正来源路径**（进程在跑就一定存在，与安装路径无关）。
+    """
+    # psutil 优先
+    try:
+        import psutil
+        p = psutil.Process(pid)
+        path = p.exe() or ""
+        if path:
+            return path
+    except Exception:
+        pass
+    # ctypes 兜底：QueryFullProcessImageNameW（Vista+，掌机/PC 都满足）
+    try:
+        import ctypes
+        from ctypes import wintypes
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH + 1)
+            size = wintypes.DWORD(wintypes.MAX_PATH + 1)
+            if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return buf.value or ""
+            return ""
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        return ""
+
+
 def _iter_pids_by_name(exe_name: str) -> "list[int]":
     """枚举所有名为 ``exe_name`` 的进程 PID。psutil 优先，ctypes 兜底。"""
     target = exe_name.lower()
@@ -276,24 +313,32 @@ def probe(stale_after: float = FRESH_WINDOW_SECS) -> HwinfoStatus:
     """一次完整探测。绝不抛异常——任何失败都退化成对应状态的 ``HwinfoStatus``。"""
     out = HwinfoStatus()
 
-    # -- 定位 exe（L0）----------------------------------------------------
-    try:
-        d = system_hwinfo_dir()
-    except Exception:
-        d = None
-    if not d:
+    # -- L1 进程层（最优先：找到进程就直接拿真实 exe 路径）-----------------
+    # 先探进程，因为只要进程在跑，HWiNFO 就一定「存在」，与装在哪个路径无关。
+    # 进程的 exe 路径是版本读取的权威来源，也修掉了「装在非标准路径检测不到」的坑。
+    proc = _find_process()
+    if proc is not None:
+        exe_path = _exe_of_pid(proc[0])
+        if exe_path:
+            out.exe_path = exe_path
+            out.version = read_version_string(exe_path) or ""
+
+    if proc is None:
+        # 进程没在跑：再用标准目录推断「装了但没起」还是「真没装」。
+        try:
+            d = system_hwinfo_dir()
+        except Exception:
+            d = None
+        if d:
+            out.exe_path = os.path.join(d, EXE_NAME)
+            out.version = read_version_string(out.exe_path) or ""
+            out.state = "stopped"
+            out.text = "HWiNFO 未运行"
+            return out
         out.state = "missing"
         out.text = "HWiNFO 未安装"
         return out
-    out.exe_path = os.path.join(d, EXE_NAME)
-    out.version = read_version_string(out.exe_path) or ""
 
-    # -- L1 进程层 --------------------------------------------------------
-    proc = _find_process()
-    if proc is None:
-        out.state = "stopped"
-        out.text = "HWiNFO 未运行"
-        return out
     out.pid, create_ts = proc
     out.uptime_s = max(0.0, time.time() - create_ts)
     # 提前预警的钟：共享内存开启时刻≈进程启动时刻。

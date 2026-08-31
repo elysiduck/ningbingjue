@@ -4729,7 +4729,9 @@ class HwinfoPanel(BlockPanel):
         if st.maybe_not_elevated:
             hints.append("读数偏少，HWiNFO 可能没以管理员运行")
         deploy_state, deploy_text = getattr(self.instance, "deploy_state", ("idle", ""))
-        if deploy_state == "missing":
+        # 真值来自 probe：只要进程在跑（无论装哪、是否后启动），「未检测到」就是
+        # 启动时的过期快照，必须压住不显示——否则会与状态行「运行中」自相矛盾。
+        if deploy_state == "missing" and not st.running:
             hints.append("未检测到 HWiNFO，请前往 hwinfo.com 下载便携版")
         elif deploy_state == "deployed":
             hints.append(f"已自动部署：{deploy_text}")
