@@ -445,6 +445,20 @@ def _apply_style_to_ctrl(ctrl: Any, st: ButtonStyle) -> None:
                 ctrl._preset_applied = True
             except Exception:
                 pass
+    # -- 状态保态（套预设不得丢失按钮当下的开/关外貌） ---------------------
+    # 上面只把预设的「基础外观」推给了按钮。若按钮此刻正处于『开』态，激活色
+    # 就被基础色盖掉，而面板侧 ``panels._set()`` 有「状态没变就不重刷」的早退
+    # （按 ``_last`` 比对），每秒一次的 sync_all 补不回来 —— 表现为「应用预设
+    # 后，状态按钮要点两下才出现状态外貌样式」。这里在套完预设后立刻按当前
+    # 开关态补一次变体，使其即时可见。
+    # 仅限自带该能力的控件（HintButton.refresh_state_style）；普通 QPushButton
+    # 无此方法时静默跳过，不改变任何既有行为。
+    try:
+        rss = getattr(ctrl, "refresh_state_style", None)
+        if callable(rss):
+            rss()
+    except Exception:
+        pass
 
 
 def apply_styles_to_buttons(buttons: list, key_map: dict[int, str] | None = None) -> None:

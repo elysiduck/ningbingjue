@@ -506,6 +506,11 @@ class HintButton(QPushButton):
         self._hint_placement_lock = None
         self._accent = "#7da2c8"
         self._active = False
+        # 本按钮是否曾处于『开』态（set_style(active=True)）。
+        # ``refresh_state_style`` 用它区分「开关按钮」与「普通按钮」：只有确认
+        # 是开关按钮，套用预设后才按当前开关态补 Active*/Inactive* 变体；普通
+        # 按钮永远保持「基础外观」，与编辑器预览的『常规』态所见即所得一致。
+        self._state_toggle = False
         # 基线字号（px）：预设样式表从这个值取 font-size，保证「套预设前后」
         # 字号完全一致（详见 HINT_BUTTON_FONT_PX 的注释）。
         self._base_font_px = HINT_BUTTON_FONT_PX
@@ -625,6 +630,8 @@ class HintButton(QPushButton):
         accent = accent or "#7da2c8"
         self._accent = accent
         self._active = bool(active)
+        if self._active:
+            self._state_toggle = True
         # 预设保护：若该按钮已套用用户预设（样式表已缓存到 _preset_ss），直接
         # 复用预设样式表后返回，绝不用自带默认外观覆盖。否则状态切换 / 周期
         # 刷新反复调用 set_style 会把「圆角 + 悬浮色」预设冲掉，交互后看起来
@@ -705,6 +712,33 @@ class HintButton(QPushButton):
         self.setStyleSheet(ss)
         self._sync_hint_margins()
         self.update()
+
+    def refresh_state_style(self) -> None:
+        """套用预设后，按按钮**当前**的开/关态补回状态外貌（Active*/Inactive*）。
+
+        根因（「应用了自定义按钮预设后，状态按钮要点两下才出现状态外貌」）：
+
+          * ``styles._apply_style_to_ctrl`` 只会把预设的**基础外观**（BackColor
+            那张样式表）推给按钮，不关心按钮当下是开还是关。
+          * 于是「正处在『开』态的按钮」被刷成了基础色，看上去像「关」。
+          * 面板侧 ``panels._set()`` 用 ``_last`` 做了「状态没变就不重刷」的
+            早退，每秒一次的 ``sync_all`` 走到这里直接 return，永远不会把状态
+            外貌补回来。
+          * 结果：第 1 下点成『关』（仍无状态外貌），第 2 下点回『开』时才
+            经 ``set_style`` 走到 ``_apply_preset_variant`` —— 即「点两下才
+            出现状态外貌样式」。
+
+        本方法由 ``_apply_style_to_ctrl`` 在套完预设后回调，让「套预设」这个
+        动作本身不丢失开关外貌。
+
+        只对**确认是开关按钮**的控件生效（``_state_toggle``，即曾经被
+        ``set_style(active=True)`` 过）：普通按钮继续停在「基础外观」，与按钮
+        风格编辑器预览默认的『常规』态保持一致（所见即所得），避免套一次预设
+        就把所有普通按钮刷成『未激活』色。
+        """
+        if not self._state_toggle:
+            return
+        self.set_style(self._accent, bool(self._active))
 
     def _apply_preset_variant(self, back, border, fore) -> None:
         """套用预设的激活/未激活态颜色，同时保留预设的几何（圆角/边框厚度）。
