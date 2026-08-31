@@ -58,6 +58,43 @@ class _FrozenGroup:
     pids: list[int] = field(default_factory=list)
 
 
+def _qwidget_cls() -> Any:
+    """延迟取 ``QWidget`` 类；无 PyQt6（headless / 纯逻辑测试）时返回 None。
+
+    blocks 层不该硬依赖 UI 框架，所以只在真正需要探活控件时才导入一次。
+    """
+    try:
+        from PyQt6.QtWidgets import QWidget  # type: ignore[import-not-found]
+        return QWidget
+    except Exception:
+        return None
+
+
+def _widget_alive(w: Any) -> bool:
+    """Best-effort：这个 Qt 控件现在还能安全访问吗？
+
+    翻页 / 重建窗口时旧控件被 ``deleteLater``，其 C++ 对象可能在事件循环里
+    已经被销毁；此时触碰它（set_tone / setGeometry / parentWidget…）会直接
+    **原生崩溃**，Python 层连 traceback 都拿不到。非 Qt 对象（测试假件、
+    headless stub）一律视为存活，不做探活。
+    """
+    if w is None:
+        return False
+    cls = _qwidget_cls()
+    if cls is not None and isinstance(w, cls):
+        try:
+            from PyQt6 import sip  # type: ignore[import-not-found]
+            return not sip.isdeleted(w)
+        except Exception:
+            try:
+                # 没有 sip 时退一步：访问一个必然触碰 C++ 对象的属性。
+                w.objectName()
+                return True
+            except Exception:
+                return False
+    return True
+
+
 class _Btn:
     def __init__(self) -> None:
         self.text = ""
@@ -198,7 +235,23 @@ class FreezeBlock:
         # PIDs whose freeze/unfreeze is in flight on the background worker — a
         # guard so a second press while the (possibly slow) window move runs
         # cannot double-suspend or race the list update.
+        #
+        # ⚠️ 这个集合曾造成「点击永久无反应」：只要某次 work() 内部抛异常，
+        # ``_on_*_done`` 收到 res=None 会直接 return（拿不到 group_pids），
+        # 于是这些 PID 永远留在 _pending 里，之后每一次点击都被
+        # ``if pid in self._pending: return`` **静默吞掉**——不执行、不弹任何
+        # 提示，用户只能重启 App。现在登记/清理统一由 ``_run_pending`` 的
+        # try/finally 负责，并额外配 ``_sweep_pending`` 超时兜底，双保险。
         self._pending: set[int] = set()
+        # pid -> 登记时刻（单调秒），用于 _sweep_pending 超时清理。
+        self._pending_ts: dict[int, float] = {}
+        # in-flight 最长保留时间：超过即视为陈旧残留并强制清除。窗口搬迁
+        # （move_pids）实测最慢 ~15 s，留足余量。
+        self._PENDING_TIMEOUT_S = 30.0
+        # 两按确认绑定到的具体目标（而非槽位）：列表会按内存降序重排，
+        # 只记槽位号会在两次按下之间悄悄换成另一个进程。
+        self._hl_pid: int | None = None
+        self._hl_where: str = ""
         # Optional ``runner(work, done)`` that runs ``work()`` on a background
         # thread and calls ``done(result)`` back on the UI thread.  The GUI
         # injects a Qt-backed runner (see app_window); when unset the action
@@ -347,7 +400,18 @@ class FreezeBlock:
         return n
 
     def resolve_candidates(self, processes: list[Any]) -> list[Any]:
-        frozen_pids = {e.pid for e in self.frozen}
+        # ⚠️ 必须排除整个冻结单元（``e.pids``）而不只是主 PID（``e.pid``）。
+        # 只排主 PID 时，一个启动组/进程族里被一起挂起的其余成员（渲染子进程、
+        # 启动器、steamwebhelper…）会在下一次后台刷新时重新出现在「可冻结」区，
+        # 明明已被挂起却显示 ❄ —— 即用户报的「已经被冻结的进程说是还没有冻结」。
+        # 更糟的是用户会再点一次，给它叠第二层 NtSuspendProcess，并在已冻结
+        # 列表里留下重复条目。
+        frozen_pids: set[int] = set()
+        for _e in self.frozen:
+            _pids = [int(x) for x in (getattr(_e, "pids", None) or []) if x]
+            frozen_pids.update(_pids or [int(getattr(_e, "pid", 0) or 0)])
+            frozen_pids.add(int(getattr(_e, "pid", 0) or 0))
+        frozen_pids.discard(0)
         ranked: list[tuple[tuple, Any]] = []
         for p in processes:
             pid = getattr(p, "pid", 0)
@@ -565,6 +629,8 @@ class FreezeBlock:
         self.frozen.sort(key=lambda e: (e.mem or 0), reverse=True)
         if self.needs_refresh:
             self.needs_refresh = False
+        # 列表重排后让高亮跟着「那一个进程」走，而不是停在旧槽位上。
+        self._sync_highlight_slot()
         self._render()
 
     def _validate_frozen(self, procs: list[Any]) -> None:
@@ -629,11 +695,44 @@ class FreezeBlock:
             return ("froz", self.FROZ_KEYS[key])
         return None
 
+    def _target_pid(self, where: str, idx: int) -> int | None:
+        """槽位当前指向的进程 PID（列表重排后会变，所以每次都实时解析）。"""
+        if where == "cand":
+            if 0 <= idx < len(self.candidates):
+                return int(getattr(self.candidates[idx], "pid", 0) or 0)
+            return None
+        if 0 <= idx < len(self.frozen):
+            return int(getattr(self.frozen[idx], "pid", 0) or 0)
+        return None
+
+    def _sync_highlight_slot(self) -> None:
+        """把两按选中的目标从「槽位」重新锚定到「进程」。
+
+        候选/已冻结列表都按内存降序排列，一次后台刷新就可能让某个进程
+        从槽位 0 滑到槽位 2。若高亮仍钉在旧槽位，用户第二次按下（无论按
+        的是屏幕上的哪一行）都会作用到**别的进程**上——表现为「我点的没
+        反应、别的进程反而被冻了」。这里按保存的 PID 重新定位槽位；目标
+        已不在列表（进程退出 / 已解冻）则直接取消这次选中。
+        """
+        if self._hl_pid is None:
+            return
+        where = self._hl_where or "cand"
+        seq = self.candidates if where == "cand" else self.frozen
+        keymap = self.CAND_SLOT_TO_KEY if where == "cand" else self.FROZ_SLOT_TO_KEY
+        for i, item in enumerate(seq):
+            if int(getattr(item, "pid", 0) or 0) == self._hl_pid:
+                self.highlight_key = keymap.get(i)
+                return
+        # 目标消失：取消选中，避免下一次按下命中一个张冠李戴的槽位。
+        self._clear_highlight()
+
     def _clear_highlight(self) -> None:
         for b in self.cand_btns + self.froz_btns:
             b.border_color = self.lt_blue
             b.border_thickness = 2
         self.highlight_key = None
+        self._hl_pid = None
+        self._hl_where = ""
 
     def _apply_highlight(self, key: int, color: Color) -> None:
         tgt = self._resolve_target(key)
@@ -649,29 +748,59 @@ class FreezeBlock:
         if self.highlight_key is None:
             return
         if now - self.highlight_ts > self.HIGHLIGHT_TIMEOUT_S:
-            self.highlight_key = None
+            self._clear_highlight()
             self.needs_refresh = True
 
-    def handle_hotkey(self, key: int, now: float | None = None) -> None:
-        """``Handle-FreezeHotkey`` — two-press freeze/unfreeze."""
+    def _sweep_pending(self, now: float | None = None) -> int:
+        """清掉超时的 in-flight 残留，返回清除个数。
+
+        ``_run_pending`` 的 try/finally 已经覆盖正常路径；这里是兜底——任何
+        我们没预料到的异常路径（后台线程被杀、回调根本没跑…）都最多让某个
+        PID 卡住 ``_PENDING_TIMEOUT_S`` 秒，而不再需要重启 App。
+        """
         now = time.time() if now is None else now
+        if not self._pending_ts:
+            return 0
+        stale = [p for p, t in list(self._pending_ts.items())
+                 if now - t > self._PENDING_TIMEOUT_S]
+        for p in stale:
+            self._pending.discard(p)
+            self._pending_ts.pop(p, None)
+        return len(stale)
+
+    def handle_hotkey(self, key: int, now: float | None = None) -> None:
+        """``Handle-FreezeHotkey`` — two-press freeze/unfreeze.
+
+        两按确认锚定的是**进程 PID**，不是槽位号。列表按内存降序排列，两次
+        按下之间的刷新会让槽位易主；只认槽位会在第二次按下时冻结/解冻另一个
+        进程（用户视角：点了没反应、或者冻错了）。
+        """
+        now = time.time() if now is None else now
+        self._sweep_pending(now)
         tgt = self._resolve_target(key)
         if tgt is None:
             return
-        if self.highlight_key == key:
+        where, idx = tgt
+        pid = self._target_pid(where, idx)
+        if not pid:
+            return
+        # 命中判定：同一个列表分区 + 同一个进程。槽位漂移不影响。
+        if (self.highlight_key == key and self._hl_where == where
+                and self._hl_pid == pid):
             self._execute(tgt)
             self._clear_highlight()
-        else:
-            self.highlight_key = key
-            self.highlight_ts = now
-            self._apply_highlight(key, self.highlight_color)
-            where, idx = tgt
-            if where == "cand" and 0 <= idx < len(self.candidates):
-                name = getattr(self.candidates[idx], "name", "?")
-                self.show_toast(f"再次点击以冻结 {name}", success=True)
-            elif where == "froz" and 0 <= idx < len(self.frozen):
-                name = self.frozen[idx].name or self.frozen[idx].pid
-                self.show_toast(f"再次点击以解冻 {name}", success=True)
+            return
+        self.highlight_key = key
+        self._hl_pid = pid
+        self._hl_where = where
+        self.highlight_ts = now
+        self._apply_highlight(key, self.highlight_color)
+        if where == "cand" and 0 <= idx < len(self.candidates):
+            name = getattr(self.candidates[idx], "name", "?")
+            self.show_toast(f"再次点击以冻结 {name}", success=True)
+        elif where == "froz" and 0 <= idx < len(self.frozen):
+            name = self.frozen[idx].name or self.frozen[idx].pid
+            self.show_toast(f"再次点击以解冻 {name}", success=True)
 
     # -- execute freeze / unfreeze ---------------------------------
     def _move_failure_hint(self) -> str:
@@ -791,6 +920,34 @@ class FreezeBlock:
                 res = None
             done(res)
 
+    def _run_pending(self, pids: list[int], work: Any, done: Any) -> None:
+        """登记 in-flight PID -> 跑 ``work`` -> **无论如何**在收尾里撤销登记。
+
+        in-flight 标记（``_pending``）是防重复挂起的闸门，但它一旦泄漏就会
+        把这些 PID 永久锁死：``_execute`` 开头的 ``if pid in self._pending``
+        会静默 return —— 不执行、不弹 toast，用户只能重启 App。
+
+        泄漏的根源是 ``_on_freeze_done`` / ``_on_unfreeze_done`` 收到
+        ``res=None``（worker 内部异常）时提前 return，拿不到 ``group_pids``
+        所以清不掉。这里把「登记」和「清理」收进同一处 try/finally，任何
+        成功 / 失败 / 异常路径都会解锁；``_sweep_pending`` 再超时兜底一层。
+        """
+        now = time.time()
+        ids = [int(x) for x in (pids or []) if x]
+        for _p in ids:
+            self._pending.add(_p)
+            self._pending_ts[_p] = now
+
+        def _wrapped(res: Any) -> None:
+            try:
+                done(res)
+            finally:
+                for _p in ids:
+                    self._pending.discard(_p)
+                    self._pending_ts.pop(_p, None)
+
+        self._run_async(work, _wrapped)
+
     def _execute(self, tgt: tuple[str, int]) -> None:
         where, idx = tgt
         if where == "cand" and 0 <= idx < len(self.candidates):
@@ -825,8 +982,6 @@ class FreezeBlock:
                             group_info[pp] = (getattr(p, "name", ""),
                                              int(getattr(p, "memory_mb", 0) or 0))
             group_pids = sorted(group_info.keys())
-            for tpid in group_pids:
-                self._pending.add(tpid)
             # R2 业务层防御：即便候选列表被绕过（如手动冻结 / 编辑面板直输 PID），
             # 仍拒绝关键系统进程。底层 ProcessManager.suspend 另有「系统目录硬保护」
             # 作双保险，二者互补覆盖名单遗漏场景。
@@ -876,7 +1031,7 @@ class FreezeBlock:
                         "group_pids": list(group_pids),
                         "moved": moved, "ok": ok_primary, "hint": hint}
 
-            self._run_async(work, self._on_freeze_done)
+            self._run_pending(group_pids, work, self._on_freeze_done)
 
         elif where == "froz" and 0 <= idx < len(self.frozen):
             e = self.frozen[idx]
@@ -890,12 +1045,12 @@ class FreezeBlock:
             group_pids = list(e.pids)
             if pid and pid in self._pending:
                 return  # already being unfrozen; ignore the double press
-            for gpid in group_pids:
-                self._pending.add(gpid)
             self.show_toast(f"正在解冻 {name or pid}…", success=True)
 
-            self._run_async(self._build_unfreeze_work(pid, name, group_pids),
-                            self._on_unfreeze_done)
+            self._run_pending(
+                group_pids,
+                self._build_unfreeze_work(pid, name, group_pids),
+                self._on_unfreeze_done)
         self._render()
 
     def _build_unfreeze_work(self, pid: int, name: str,
@@ -984,13 +1139,13 @@ class FreezeBlock:
                     break
             if target is None:
                 return False
+            self._sweep_pending()
             if pid in self._pending:
                 return True  # already being unfrozen
             group_pids = list(target.pids)
-            for gpid in group_pids:
-                self._pending.add(gpid)
             self.show_toast(f"正在解冻 {target.name or pid}…", success=True)
-            self._run_async(
+            self._run_pending(
+                group_pids,
                 self._build_unfreeze_work(target.pid, target.name, group_pids),
                 self._on_unfreeze_done)
             return True
@@ -1216,14 +1371,33 @@ class FreezeBlock:
 
     # -- toast ---------------------------------------------------------
     def show_toast(self, text: str, success: bool = True) -> None:
-        panel = self.ui.get("toast_panel")
-        label = self.ui.get("toast_label")
-        if panel is not None and hasattr(panel, "set_tone"):
-            panel.set_tone(success)
-            panel.visible = True
-        if label is not None:
-            label.text = text
-            label.fore_color = Color.from_rgb(0, 230, 120) if success else Color.from_rgb(255, 80, 80)
+        """在卡片底部弹出提示。
+
+        必须先探活：翻页 / 重建窗口时旧控件被 deleteLater，其 C++ 对象可能
+        已在事件循环里销毁；直接访问已销毁的 QWidget 会**原生崩溃**（没有
+        Python traceback 可捕获）。这与 ``ui.panels._show_block_toast`` 的
+        处理一致——那边是各卡片共用的统一入口，这里不便跨层 import（blocks
+        层不应依赖 ui 层），故就地复刻同一套探活逻辑。
+        整个函数还包了 try/except：冻结/解冻的收尾会调用它，一条提示失败
+        绝不能中断业务账本（否则又会退化成 _pending 泄漏那类静默故障）。
+        """
+        try:
+            panel = self.ui.get("toast_panel")
+            label = self.ui.get("toast_label")
+            if not _widget_alive(panel):
+                panel = None
+            if not _widget_alive(label):
+                label = None
+            if panel is not None and hasattr(panel, "set_tone"):
+                panel.set_tone(success)
+                panel.visible = True
+            if label is not None:
+                label.text = text
+                label.fore_color = (
+                    Color.from_rgb(0, 230, 120) if success
+                    else Color.from_rgb(255, 80, 80))
+        except Exception:
+            pass
 
     # -- item-mode navigation ---------------------------------------
     def on_activate_item(self) -> None:

@@ -174,7 +174,13 @@ _SHIM_MAP: dict[str, dict[str, str]] = {
 _PUBLIC_MAP: dict[str, dict[str, str]] = {
     "freeze": {
         "Handle-FreezeHotkey": "handle_hotkey",
-        "Handle-FreezeEnter": "on_item_confirm",
+        # 原先这里还挂着 ``"Handle-FreezeEnter": "on_item_confirm"``，但
+        # FreezeBlock 根本没有 ``on_item_confirm`` 方法（Phase 2 焦点系统
+        # 只留了 ``on_activate_item`` / ``on_deactivate_item``）。任何走这个
+        # shim 的调用都会 AttributeError —— 而调用方通常把它包在 try 里，
+        # 表现就是「按了没反应、也不报错」。Enter / A 的确认已统一由
+        # InteractionController 分发（见 FreezePanel.nav_items 的 confirm），
+        # 这条死映射直接删除，避免后来人误以为还有第二条入口。
     },
     "procmon": {
         "Toggle-ProcMonScript": "toggle_config",

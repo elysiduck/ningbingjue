@@ -620,7 +620,17 @@ class InteractionController(QObject):
                     ranges[pi] = (len(items), len(items))
                     continue
                 fn = getattr(p, "nav_items", None)
-                sub = fn() if callable(fn) else None
+                # 单张卡片出错不得拖垮整条刷新链：异常会一路冒到
+                # _SyncBridge.sync_all 被静默吞掉，导致 ``self._items`` 停在
+                # 崩溃前那一刻（赋值在循环之后），此后所有卡片的点击都找不到
+                # 导航项 -> 表现为「点了完全没反应」。这里逐面板兜住，坏掉的
+                # 那张卡本轮只是没有导航项，其余卡片照常。
+                try:
+                    sub = fn() if callable(fn) else None
+                except Exception:
+                    logging.getLogger(__name__).exception(
+                        "refresh: nav_items() raised for panel %r", p)
+                    sub = None
                 if not sub:
                     sub = []
                 ranges[pi] = (len(items), len(items) + len(sub))

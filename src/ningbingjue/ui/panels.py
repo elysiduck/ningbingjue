@@ -2444,9 +2444,18 @@ class FreezePanel(BlockPanel):
                 except Exception:
                     pass
 
+        # ⚠️ 按钮可见性与 ``b.candidates`` / ``b.frozen`` 是两份独立状态，
+        # 只在 sync() 里对齐。一旦后台刷新改了数据而 sync() 还没跑（或滚
+        # 动期被整窗跳过），``btn.isVisible()`` 与列表长度就会脱节 —— 原来
+        # 直接 ``b.candidates[i]`` 会抛 IndexError，而调用方
+        # InteractionController.refresh() 又把异常静默吞掉，结果是导航项停
+        # 在崩溃前那一刻不再更新：整张卡的点击从此「毫无反应」。这里按较短
+        # 的一方截断，宁可少给一行，也不能让整条刷新链断掉。
         for i, btn in enumerate(self.cand_btns):
             if not btn.isVisible():
                 continue
+            if i >= len(b.candidates):
+                break
             k = rev_cand.get(i)
             if k is None:
                 continue
@@ -2465,6 +2474,8 @@ class FreezePanel(BlockPanel):
         for i, btn in enumerate(self.froz_btns):
             if not btn.isVisible():
                 continue
+            if i >= len(b.frozen):
+                break
             k = rev_froz.get(i)
             if k is None:
                 continue
