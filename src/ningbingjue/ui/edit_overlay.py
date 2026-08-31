@@ -8924,6 +8924,7 @@ class LSEditPanel(QWidget):
             "QLineEdit{background:rgba(255,255,255,0.08); color:#dfe6f0;"
             " border-radius:4px; padding:4px 8px; font-size:12px;}")
         self._path_edit.textChanged.connect(lambda t: self._on_path_edit(t))
+        self._suppress_path_persist = False
         lay.addWidget(self._path_edit)
 
         btn_row = QHBoxLayout()
@@ -8992,7 +8993,13 @@ class LSEditPanel(QWidget):
     def refresh(self) -> None:
         self.block = self._block()
         if self.block is not None:
-            self._path_edit.setText(self.block.exe_path)
+            # 防止「打开编辑项 → setText → textChanged → set_exe_path」把框里的值
+            # 又写回一遍：旧逻辑会因此把空串/旧值持久化，覆盖用户刚选的路径。
+            self._suppress_path_persist = True
+            try:
+                self._path_edit.setText(self.block.exe_path)
+            finally:
+                self._suppress_path_persist = False
             self._update_status()
 
     def _update_status(self) -> None:
@@ -9012,6 +9019,8 @@ class LSEditPanel(QWidget):
 
     # -- 交互 ----------------------------------------------------------
     def _on_path_edit(self, text: str) -> None:
+        if self._suppress_path_persist:
+            return
         if self.block is not None:
             self.block.set_exe_path(text.strip())
         self._update_status()

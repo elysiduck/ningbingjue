@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shutil
+import time
 from typing import Any
 
 try:  # Windows-only；非 Windows 下置空，离线搜索直接返回空。
@@ -264,9 +265,17 @@ class LosslessScaling(ExternalAdapter):
             return False, "nopath"
         try:
             os.startfile(path)  # noqa: S603 - 已校验过的 LS 主程序（双击即打开）
-            return True, "launched"
         except Exception:
             return False, "fail"
+        # os.startfile 只代表 Windows 接受了 open 动词（ShellExecute 返回 >32），
+        # 不代表 LS 进程真的存活。这里轮询验证：若 ~1.2s 内没出现 losslessscaling
+        # 进程，说明它启动即退出（常见于 Steam 未运行 / 缺运行库 / exe 崩溃），
+        # 必须如实回报，否则用户会看到「已启动」却什么都没发生。
+        for _ in range(12):
+            if self.is_running():
+                return True, "launched"
+            time.sleep(0.1)
+        return False, "nostart"
 
     def save_preset(self, name: str) -> bool:
         if not os.path.exists(self.settings_xml) or not name:

@@ -152,6 +152,8 @@ class LSBlock:
             self.show_toast("启动 LS 失败，请检查路径或手动启动", success=False)
         elif key == "launched":
             self.show_toast("已启动 Lossless Scaling")
+        elif key == "nostart":
+            self.show_toast("已发送启动指令，但 LS 未出现（确认 Steam 是否在运行 / 是否缺运行库）", success=False)
         self.refresh_panel()
         return key
 
