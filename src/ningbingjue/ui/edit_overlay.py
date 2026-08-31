@@ -7400,6 +7400,46 @@ class _TMSwitch(QCheckBox):
         p.end()
 
 
+class _TransparentDot(QFrame):
+    """「透明/无」预设点：画棋盘底 + 一道红色斜线便于辨认。
+
+    纯 QSS 画不出斜线，故在 paintEvent 里自绘；选中态用 ``set_selected``
+    切换（不走 setStyleSheet，避免覆盖自绘背景）。
+    """
+
+    def __init__(self, selected: bool, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setFixedSize(16, 16)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._selected = bool(selected)
+
+    def set_selected(self, v: bool) -> None:
+        if self._selected != v:
+            self._selected = bool(v)
+            self.update()
+
+    def paintEvent(self, _e) -> None:  # noqa: N802
+        r = self.rect()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        # 棋盘占位底（区分于「跟随主题」灰斜纹）。
+        cell = 4
+        for y in range(0, r.height(), cell):
+            for x in range(0, r.width(), cell):
+                dark = ((x // cell) + (y // cell)) % 2 == 0
+                p.fillRect(x, y, cell, cell,
+                           QColor("#2a2f3a") if dark else QColor("#161a22"))
+        # 中间一道红色斜线（禁止/无 语义）。
+        p.setPen(QPen(QColor("#ff5a5a"), 2))
+        p.drawLine(r.topLeft(), r.bottomRight())
+        # 外框：选中高亮 / 未选灰边。
+        if self._selected:
+            p.setPen(QPen(QColor("#e8ecf1"), 2))
+        else:
+            p.setPen(QPen(QColor("#7a8696"), 1))
+        p.drawRect(r.adjusted(1, 1, -1, -1))
+
+
 class _TMPresetRow(QWidget):
     """当前色块 + 横向滚动预设点 + 「自定义」按钮（单行，绝不撑宽窗口）。
 
@@ -7487,10 +7527,13 @@ class _TMPresetRow(QWidget):
                 f" border-radius: 8px; }}")
 
     def _make_dot(self, token: str, selected: bool, kind: str) -> QFrame:
-        d = QFrame()
-        d.setFixedSize(16, 16)
-        d.setCursor(Qt.CursorShape.PointingHandCursor)
-        d.setStyleSheet(self._dot_style(token, selected, kind))
+        if kind == "transparent":
+            d = _TransparentDot(selected)
+        else:
+            d = QFrame()
+            d.setFixedSize(16, 16)
+            d.setCursor(Qt.CursorShape.PointingHandCursor)
+            d.setStyleSheet(self._dot_style(token, selected, kind))
         d.mousePressEvent = (  # type: ignore[assignment]
             lambda _e, h=token: self._choose(h))
         self._dots.append((d, token, kind))
@@ -7516,7 +7559,12 @@ class _TMPresetRow(QWidget):
         self._cur_hex = str(hexv or "")
         self._sw.setStyleSheet(_tm_swatch_style(self._cur_hex or "0e1117"))
         for d, token, kind in self._dots:
-            d.setStyleSheet(self._dot_style(token, token == self._cur_hex, kind))
+            if kind == "transparent":
+                # 自绘点：用 set_selected 切换选中，setStyleSheet 会覆盖自绘。
+                if hasattr(d, "set_selected"):
+                    d.set_selected(token == self._cur_hex)  # type: ignore[attr-defined]
+            else:
+                d.setStyleSheet(self._dot_style(token, token == self._cur_hex, kind))
 
     def custom_button(self) -> QPushButton:
         """供手柄导航把「自定义取色」挂进 nav_items。"""
