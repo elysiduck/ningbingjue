@@ -29,8 +29,6 @@ import sys
 import time
 import types
 
-import pytest
-
 from ningbingjue.ui import edit_overlay as eo
 from ningbingjue.ui.edit_overlay import LayoutEditPanel
 
@@ -332,7 +330,7 @@ def test_watcher_fails_when_child_dies(monkeypatch):
 
 def test_watcher_does_not_block_the_main_thread(monkeypatch):
     """The whole point of the async rewrite: the loop keeps spinning."""
-    app = _ensure_qapp()
+    _ensure_qapp()
     monkeypatch.setattr(eo._RestartWatcher, "GRACE_S", 0.6)
     beats = {"n": 0}
 
