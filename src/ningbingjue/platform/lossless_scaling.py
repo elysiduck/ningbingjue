@@ -191,22 +191,52 @@ class LosslessScaling(ExternalAdapter):
                 uniq.append(rp)
         return uniq
 
+    @staticmethod
+    def _scan_dir_for_ls(base: str) -> list[str]:
+        """在 ``base`` 下浅扫一层，找 ``lossless*`` 目录里的 ``losslessscaling*.exe``。
+
+        安装目录名不一定叫 ``Lossless Scaling``（本地化名 / 带版本后缀 /
+        用户自建目录），老版硬拼 ``Lossless Scaling\\losslessscaling.exe``
+        会整体漏掉。这里按前缀浅扫一层并只收 ``losslessscaling*.exe``，
+        exe 改名（如带版本后缀）也能命中。开销可忽略（只列一层目录）。"""
+        out: list[str] = []
+        if not base or not os.path.isdir(base):
+            return out
+        try:
+            for entry in os.listdir(base):
+                if not entry.lower().startswith("lossless"):
+                    continue
+                d = os.path.join(base, entry)
+                if not os.path.isdir(d):
+                    continue
+                try:
+                    for f in os.listdir(d):
+                        fl = f.lower()
+                        if fl.startswith("losslessscaling") and fl.endswith(".exe"):
+                            out.append(os.path.join(d, f))
+                except Exception:
+                    continue
+        except Exception:
+            return out
+        return out
+
     def _search_known_locations(self) -> str:
         """LS 未运行时，按常见安装位置离线搜索 ``losslessscaling.exe``。
 
-        覆盖 Steam 库（主库 + 额外库）、Program Files(x86)/Program Files、
-        LocalAppData 下的 ``Lossless Scaling`` 目录。命中最先找到的返回全路径。"""
+        覆盖 Steam 库（主库 + libraryfolders.vdf 里的额外库）、Program
+        Files(x86)/Program Files、LocalAppData：先试精确的 ``Lossless Scaling``
+        目录，再按前缀浅扫一层兜底（目录名/exe 名与官方不一致时仍能命中）。"""
         candidates: list[str] = []
         for steam_root in self._steam_roots():
-            candidates.append(os.path.join(
-                steam_root, "steamapps", "common",
-                "Lossless Scaling", "losslessscaling.exe"))
+            common = os.path.join(steam_root, "steamapps", "common")
+            candidates.append(os.path.join(common, "Lossless Scaling", "losslessscaling.exe"))
+            candidates.extend(self._scan_dir_for_ls(common))
         for base in (os.environ.get("ProgramFiles"),
                      os.environ.get("ProgramFiles(x86)"),
                      os.environ.get("LOCALAPPDATA")):
             if base:
-                candidates.append(os.path.join(
-                    base, "Lossless Scaling", "losslessscaling.exe"))
+                candidates.append(os.path.join(base, "Lossless Scaling", "losslessscaling.exe"))
+                candidates.extend(self._scan_dir_for_ls(base))
         for c in candidates:
             if c and os.path.exists(c):
                 return c
@@ -216,6 +246,15 @@ class LosslessScaling(ExternalAdapter):
         pm = self._get_pm()
         if pm is None or not pm.available:
             return None
+        # ① 跨会话直扫：enumerate() 只返回当前会话，Steam/启动器在别的会话
+        #    拉起的 LS 会被整体漏掉（实测会话过滤砍掉 58% 进程）。
+        try:
+            pid = pm.find_pid_by_name("losslessscaling", exact=False)
+            if pid:
+                return pid
+        except Exception:
+            pass
+        # ② 兜底：会话内枚举。
         try:
             for p in pm.enumerate():
                 if "losslessscaling" in (p.name or "").lower():
@@ -342,7 +381,12 @@ class LosslessScaling(ExternalAdapter):
             return {"ScalingType": "读取失败", "FrameGeneration": "读取失败", "PerfMode": "读取失败"}
 
     def is_running(self) -> bool:
-        """Detect whether the Lossless Scaling process is running (Windows)."""
+        """Detect whether the Lossless Scaling process is running (Windows).
+
+        先走**跨会话直扫**（psutil/Toolhelp，无会话过滤）：``enumerate()`` 只看
+        当前会话，LS 若在别的会话（Steam 拉起 / 提权启动）就会被判成"没运行"，
+        直接导致启动验证误报 ``nostart``。直扫不成再退回会话内枚举。
+        """
         pm = self._pm
         if pm is None:
             try:
@@ -352,6 +396,11 @@ class LosslessScaling(ExternalAdapter):
                 return False
         if not pm.available:
             return False
+        try:
+            if pm.is_running_anywhere("losslessscaling", exact=False):
+                return True
+        except Exception:
+            pass
         try:
             return any("losslessscaling" in (p.name or "").lower() for p in pm.enumerate())
         except Exception:

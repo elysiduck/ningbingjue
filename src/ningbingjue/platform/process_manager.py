@@ -193,6 +193,140 @@ def _collect_visible_window_pids() -> set[int]:
         return set()
 
 
+# --------------------------------------------------------------------------
+# 进程扫描原语 —— 对齐 platform/hwinfo_status.py 的 HWiNFO 式写法
+# --------------------------------------------------------------------------
+# 为什么不再把 wmic / WMI 当首选（实测对照，见 _ls_probe_cmp.py）：
+#
+#   现行 wmic→CIM→enumerate 链   388 ms
+#   psutil 直扫                   37 ms
+#   CreateToolhelp32Snapshot      15 ms（且覆盖率最高）
+#
+# 三点决定性差异：
+#   1. **会话过滤**：``enumerate()`` 只返回当前会话。实测本机 405 个进程里有
+#      234 个（58%）被会话过滤砍掉 —— 跨会话的目标（Steam / 启动器在别的会话
+#      拉起的游戏与工具）用 enumerate() **永远扫不到**。这正是「LS 明明开着
+#      却检测不到」的结构性原因。
+#   2. **子进程依赖**：wmic 是「按需功能」可选组件，精简版系统与掌机 OEM 镜像
+#      上常被移除；PowerShell Get-CimInstance 可能被执行策略拦截，且每次都要
+#      拉起一个 powershell.exe。
+#   3. **速度**：纯进程内 API 比拉子进程快一个数量级，点「自动设置」不再卡顿。
+#
+# 因此顺序改为：本机直扫（psutil→Toolhelp）→ WMI → enumerate 兜底。
+class PROCESSENTRY32W(ctypes.Structure):
+    """``CreateToolhelp32Snapshot`` 的进程条目（宽字符版）。"""
+
+    _fields_ = [
+        ("dwSize", ctypes.wintypes.DWORD),
+        ("cntUsage", ctypes.wintypes.DWORD),
+        ("th32ProcessID", ctypes.wintypes.DWORD),
+        ("th32DefaultHeapID", ctypes.c_ulonglong),
+        ("th32ModuleID", ctypes.wintypes.DWORD),
+        ("cntThreads", ctypes.wintypes.DWORD),
+        ("th32ParentProcessID", ctypes.wintypes.DWORD),
+        ("pcPriClassBase", ctypes.c_long),
+        ("dwFlags", ctypes.wintypes.DWORD),
+        ("szExeFile", ctypes.wintypes.WCHAR * 260),
+    ]
+
+
+def _iter_processes_toolhelp() -> list[tuple[int, str]]:
+    """``CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS)`` 全量枚举。
+
+    psutil 不可用时的兜底：同为纯进程内 API，**无会话过滤**、不起子进程。
+    失败返回空列表。"""
+    out: list[tuple[int, str]] = []
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        TH32CS_SNAPPROCESS = 0x00000002
+        snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+        if snap in (-1, 0, None):
+            return []
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(entry)
+            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                out.append((int(entry.th32ProcessID), str(entry.szExeFile or "")))
+                ok = k32.Process32NextW(snap, ctypes.byref(entry))
+        finally:
+            k32.CloseHandle(snap)
+    except Exception:
+        return []
+    return out
+
+
+def iter_processes_native() -> list[tuple[int, str]]:
+    """枚举全系统 ``(pid, 映像名)`` —— 无会话过滤、不拉起子进程。
+
+    psutil 优先（已随 exe 打包，见 build_exe.py 的 ``--hidden-import psutil``），
+    不可用则回退 ``CreateToolhelp32Snapshot``。任一路失败都返回空列表，
+    由调用方继续兜底（绝不抛异常）。"""
+    try:
+        import psutil
+        out: list[tuple[int, str]] = []
+        for p in psutil.process_iter(["name", "pid"]):
+            try:
+                out.append((int(p.info["pid"]), str(p.info.get("name") or "")))
+            except Exception:
+                continue
+        if out:
+            return out
+    except Exception:
+        pass
+    return _iter_processes_toolhelp()
+
+
+def exe_path_of_pid(pid: int) -> str:
+    """返回 ``pid`` 的完整映像路径；取不到返回 ""。
+
+    psutil 的 ``Process.exe()`` 优先，失败回退 ``QueryFullProcessImageNameW``
+    （``PROCESS_QUERY_LIMITED_INFORMATION``，Vista+ 均支持）。"""
+    try:
+        import psutil
+        path = psutil.Process(int(pid)).exe() or ""
+        if path:
+            return path
+    except Exception:
+        pass
+    try:
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid))
+        if not h:
+            return ""
+        try:
+            buf = ctypes.create_unicode_buffer(2048)
+            size = ctypes.wintypes.DWORD(2048)
+            if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
+                return buf.value or ""
+        finally:
+            k32.CloseHandle(h)
+    except Exception:
+        pass
+    return ""
+
+
+def iter_pids_by_name(name: str, exact: bool = True) -> list[int]:
+    """按映像名找 PID（大小写不敏感，无会话过滤）。
+
+    ``exact=True``  —— 映像名完全等于 ``name``；
+    ``exact=False`` —— ``name`` 是映像名的**子串**，容忍 exe 改名或带版本后缀
+                        （``losslessscaling`` 能匹配 ``LosslessScaling.exe`` /
+                        ``LosslessScaling3.exe``）。老版只做精确相等，版本一改
+                        就整体漏判。
+    """
+    target = (name or "").lower()
+    if not target:
+        return []
+    out: list[int] = []
+    for pid, pname in iter_processes_native():
+        nm = (pname or "").lower()
+        if (nm == target) if exact else (target in nm):
+            out.append(pid)
+    return out
+
+
 class ProcessManager(ExternalAdapter, abc.ABC):
     @abc.abstractmethod
     def suspend(self, pid: int) -> bool: ...
@@ -217,6 +351,18 @@ class ProcessManager(ExternalAdapter, abc.ABC):
 
     @abc.abstractmethod
     def is_running(self, name: str) -> bool: ...
+
+    # -- 跨会话判定（非抽象：默认退化，实现可覆写） ------------------------
+    def find_pid_by_name(self, name: str, exact: bool = False) -> int | None:
+        """无会话过滤地按映像名找首个 PID；找不到返回 ``None``。
+
+        ``enumerate()`` 的会话过滤会让跨会话目标（Steam/启动器在别的会话拉起的
+        程序）永远不可见，故另开一条跨会话通道。默认实现返回 ``None``。"""
+        return None
+
+    def is_running_anywhere(self, name: str, exact: bool = False) -> bool:
+        """跨会话判定进程是否在跑（默认实现：退回 ``is_running`` 的语义）。"""
+        return False
 
 
 class Win32ProcessManager(ProcessManager):
@@ -422,7 +568,7 @@ class Win32ProcessManager(ProcessManager):
             pass
         return ""
 
-    def find_exe_path_by_name(self, name: str) -> str | None:
+    def find_exe_path_by_name(self, name: str, fuzzy: bool = True) -> str | None:
         """Return the full image path of the first running process whose image
         name (case-insensitive) equals ``name``.
 
@@ -430,20 +576,50 @@ class Win32ProcessManager(ProcessManager):
         ``losslessscaling.exe`` and read its on-disk location so it can be
         re-launched later.  Returns ``None`` when no match or on any failure.
 
-        探测策略（见 ``_find_exe_path_via_wmi`` 说明）：优先用 WMI
-        ``ExecutablePath``（无需句柄、跨会话/跨 IL 鲁棒），失败再回退到
-        ``enumerate()`` + ``QueryFullProcessImageNameW``。
+        探测顺序（实测依据见模块顶部注释与 ``_ls_probe_cmp.py`` 对照实验）：
+
+        ① **本机直扫** ``iter_pids_by_name`` + ``exe_path_of_pid``
+           （psutil → Toolhelp）。无会话过滤、不起子进程，15~40 ms。放在最前，
+           因为 ``enumerate()`` 的会话过滤实测砍掉 58% 的进程（跨会话的 LS
+           永远扫不到），而 wmic 在精简版系统上可能根本不存在。
+        ② **WMI** ``ExecutablePath``（需 wmic/PowerShell，慢但无需进程句柄，
+           对提升权限 / 低完整性级别的目标仍有效）。
+        ③ **模糊直扫**：用去扩展名的主干做子串匹配，容忍 exe 改名/版本后缀。
+        ④ 最后才退回 ``enumerate()`` + ``QueryFullProcessImageNameW``。
         """
         if self._kernel32 is None:
             return None
         name = (name or "").lower()
         if not name:
             return None
-        # 主路径：WMI ExecutablePath（鲁棒，跨会话/跨 IL/无需 OpenProcess）。
+
+        # ① 本机直扫：精确名（无会话过滤，最快最全）
+        try:
+            for pid in iter_pids_by_name(name, exact=True):
+                exe = exe_path_of_pid(pid) or self._query_image_name(pid)
+                if exe:
+                    return exe
+        except Exception:
+            pass
+
+        # ② WMI ExecutablePath（无需句柄，跨 IL 鲁棒）
         exe = self._find_exe_path_via_wmi(name)
         if exe:
             return exe
-        # 兜底：enumerate() + QueryFullProcessImageNameW（需打开目标句柄）。
+
+        # ③ 模糊直扫：容忍 exe 改名 / 版本后缀（如 LosslessScaling3.exe）
+        if fuzzy:
+            stem = os.path.splitext(name)[0]
+            if stem and stem != name:
+                try:
+                    for pid in iter_pids_by_name(stem, exact=False):
+                        exe = exe_path_of_pid(pid) or self._query_image_name(pid)
+                        if exe:
+                            return exe
+                except Exception:
+                    pass
+
+        # ④ 最后退回 enumerate()（有会话过滤，仅作兜底）
         try:
             for p in self.enumerate():
                 if p.name.lower() == name:
@@ -453,6 +629,25 @@ class Win32ProcessManager(ProcessManager):
         except Exception:
             return None
         return None
+
+    def find_pid_by_name(self, name: str, exact: bool = False) -> int | None:
+        """无会话过滤地按映像名找首个 PID（见基类说明）。"""
+        try:
+            for pid in iter_pids_by_name(name, exact=exact):
+                return pid
+        except Exception:
+            pass
+        return None
+
+    def is_running_anywhere(self, name: str, exact: bool = False) -> bool:
+        """跨会话判定进程是否在跑（见基类说明）。
+
+        只走无会话过滤的直扫 —— 与 ``enumerate()`` 互补：后者用于需要按会话
+        收敛的列表场景（冻结候选 / procmon），前者用于「在不在跑」的判定。"""
+        try:
+            return bool(iter_pids_by_name(name, exact=exact))
+        except Exception:
+            return False
 
     def focus_window(self, pid: int) -> bool:
         """Restore + activate the top-level visible windows owned by ``pid``.
@@ -822,8 +1017,22 @@ class MockProcessManager(ProcessManager):
         name = name.lower()
         return any(p.name.lower() == name for p in self.processes)
 
-    def find_exe_path_by_name(self, name: str) -> str | None:
-        return self.exe_paths.get((name or "").lower())
+    def find_exe_path_by_name(self, name: str, fuzzy: bool = True) -> str | None:
+        key = (name or "").lower()
+        if key in self.exe_paths:
+            return self.exe_paths[key]
+        return None
+
+    def find_pid_by_name(self, name: str, exact: bool = False) -> int | None:
+        key = (name or "").lower()
+        for p in self.processes:
+            nm = (p.name or "").lower()
+            if (nm == key) if exact else (key in nm):
+                return p.pid
+        return None
+
+    def is_running_anywhere(self, name: str, exact: bool = False) -> bool:
+        return self.find_pid_by_name(name, exact=exact) is not None
 
     def focus_window(self, pid: int) -> bool:
         return any(p.pid == pid for p in self.processes)

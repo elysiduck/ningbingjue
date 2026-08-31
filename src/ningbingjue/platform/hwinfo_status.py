@@ -180,87 +180,27 @@ def _exe_of_pid(pid: int) -> str:
     修「装在非标准路径的 HWiNFO 检测不到」的关键：拿到进程后直接反问 OS
     「你的 exe 在哪」，比 ``system_hwinfo_dir()`` 的目录猜测靠谱得多，
     同时给出版本读取的**真正来源路径**（进程在跑就一定存在，与安装路径无关）。
+
+    实现委托给 ``process_manager.exe_path_of_pid`` —— 与 LS 的进程路径自动
+    检测共用同一套原语（psutil → QueryFullProcessImageNameW），避免两份
+    各写一遍、其中一份漏修。
     """
-    # psutil 优先
     try:
-        import psutil
-        p = psutil.Process(pid)
-        path = p.exe() or ""
-        if path:
-            return path
-    except Exception:
-        pass
-    # ctypes 兜底：QueryFullProcessImageNameW（Vista+，掌机/PC 都满足）
-    try:
-        import ctypes
-        from ctypes import wintypes
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-        h = k32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-        if not h:
-            return ""
-        try:
-            buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH + 1)
-            size = wintypes.DWORD(wintypes.MAX_PATH + 1)
-            if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)):
-                return buf.value or ""
-            return ""
-        finally:
-            k32.CloseHandle(h)
+        from .process_manager import exe_path_of_pid
+        return exe_path_of_pid(pid) or ""
     except Exception:
         return ""
 
 
 def _iter_pids_by_name(exe_name: str) -> "list[int]":
-    """枚举所有名为 ``exe_name`` 的进程 PID。psutil 优先，ctypes 兜底。"""
-    target = exe_name.lower()
-    # psutil
-    try:
-        import psutil
-        out = []
-        for p in psutil.process_iter(["name", "pid"]):
-            if (p.info.get("name") or "").lower() == target:
-                out.append(int(p.info["pid"]))
-        return out
-    except Exception:
-        pass
-    # ctypes: CreateToolhelp32Snapshot
-    try:
-        import ctypes
-        from ctypes import wintypes
-        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
-        TH32CS_SNAPPROCESS = 0x00000002
-        INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+    """枚举所有名为 ``exe_name`` 的进程 PID。
 
-        class PROCESSENTRY32W(ctypes.Structure):
-            _fields_ = [
-                ("dwSize", wintypes.DWORD),
-                ("cntUsage", wintypes.DWORD),
-                ("th32ProcessID", wintypes.DWORD),
-                ("th32DefaultHeapID", ctypes.c_ulonglong),
-                ("th32ModuleID", wintypes.DWORD),
-                ("cntThreads", wintypes.DWORD),
-                ("th32ParentProcessID", wintypes.DWORD),
-                ("pcPriClassBase", ctypes.c_long),
-                ("dwFlags", wintypes.DWORD),
-                ("szExeFile", wintypes.WCHAR * 260),
-            ]
-
-        snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
-        if snap in (INVALID_HANDLE_VALUE, 0, None):
-            return []
-        try:
-            entry = PROCESSENTRY32W()
-            entry.dwSize = ctypes.sizeof(entry)
-            out = []
-            ok = k32.Process32FirstW(snap, ctypes.byref(entry))
-            while ok:
-                if (entry.szExeFile or "").lower() == target:
-                    out.append(int(entry.th32ProcessID))
-                ok = k32.Process32NextW(snap, ctypes.byref(entry))
-            return out
-        finally:
-            k32.CloseHandle(snap)
+    委托给 ``process_manager.iter_pids_by_name`` —— 与 LS 检测共用同一套
+    无会话过滤的原语（psutil 优先 → CreateToolhelp32Snapshot 兜底）。
+    """
+    try:
+        from .process_manager import iter_pids_by_name
+        return iter_pids_by_name(exe_name, exact=True)
     except Exception:
         return []
 

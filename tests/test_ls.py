@@ -189,12 +189,46 @@ def test_launch_transient_detect_does_not_persist(tmp_path, monkeypatch):
     # 已存路径为空（模拟从未设置 / 被清空），临时探测给一个假路径
     monkeypatch.setattr(ls, "detect_exe_path",
                         lambda: str(tmp_path / "losslessscaling.exe"))
+    # launch() 发出启动指令后会轮询 is_running() 验证进程是否真的起来。这里的
+    # 假路径不是真程序、进程不会出现，故注入 is_running=True 模拟「LS 真的起来
+    # 了」，让本用例聚焦在它真正要守的东西：临时探测绝不写回 AppData。
+    monkeypatch.setattr(ls, "is_running", lambda: True)
 
     ok, key = ls.launch()
     assert key == "launched"
     assert called["startfile"] == [str(tmp_path / "losslessscaling.exe")]
     # 临时探测绝不写回：AppData 下不应生成 ls_config.json（不覆盖用户路径）
     assert not (appdata / "ls_config.json").exists()
+
+
+def test_launch_reports_nostart_when_process_never_appears(tmp_path, monkeypatch):
+    """进程始终没出现时必须如实回报 ``nostart``，不能谎报 ``launched``。
+
+    回归 commit 73c0217：``os.startfile`` 只代表 ShellExecute 接受了 open 动词
+    （返回 >32），不代表 LS 真的存活 —— Steam 未运行 / 缺运行库 / exe 崩溃时
+    LS 会启动即退出，老代码照样弹「已启动」，用户看到的是毫无效果。
+    """
+    from ningbingjue.platform.lossless_scaling import LosslessScaling
+    called: list[str] = []
+    monkeypatch.setattr(
+        "ningbingjue.platform.lossless_scaling.os.startfile",
+        lambda p: called.append(p))
+    # 轮询是 12×0.1s，把 sleep 打桩掉，测试不必真等 1.2s
+    monkeypatch.setattr(
+        "ningbingjue.platform.lossless_scaling.time.sleep", lambda _s: None)
+
+    appdata = tmp_path / "appdata"
+    monkeypatch.setattr(LosslessScaling, "_user_data_dir",
+                        staticmethod(lambda: str(appdata)))
+    ls = LosslessScaling("settings.xml", str(tmp_path / "presets"))
+    fake = tmp_path / "losslessscaling.exe"
+    monkeypatch.setattr(ls, "detect_exe_path", lambda: str(fake))
+    monkeypatch.setattr(ls, "is_running", lambda: False)  # 启动即退出
+
+    ok, key = ls.launch()
+    assert ok is False
+    assert key == "nostart"
+    assert called == [str(fake)]
 
 
 class _FakeLsNoWrite:
