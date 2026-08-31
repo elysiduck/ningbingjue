@@ -720,9 +720,11 @@ class TileEditPanel(QWidget):
             _TILE_BG_PRESETS, "", self._on_bg_pick, allow_empty=True)
         f_bg.addWidget(self._bg_row, 1)
         tf.addLayout(f_bg)
-        # 空点含义提示（斜纹点 = 不单独设色）。
-        self._border_row._dots[0].setToolTip("跟随呼吸灯主题色")
-        self._bg_row._dots[0].setToolTip("透明（用磁贴默认底色）")
+        # 空点含义提示（斜纹点 = 不单独设色）。_dots 项为 (QFrame, hex) 元组。
+        _bdr_dot, _ = self._border_row._dots[0]
+        _bdr_dot.setToolTip("跟随呼吸灯主题色")
+        _bg_dot, _ = self._bg_row._dots[0]
+        _bg_dot.setToolTip("透明（用磁贴默认底色）")
 
         # 新增磁贴：从「磁贴区块设置」卡移到此处，与「删除磁贴」同组在底部。
         self._add_tile_btn = HintButton("新增磁贴")
