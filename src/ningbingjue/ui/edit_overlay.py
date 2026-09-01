@@ -71,6 +71,7 @@ from PyQt6.QtWidgets import (
     QWidgetItem,
     QLayout,
     QLayoutItem,
+    QProgressBar,
 )
 
 from ..core.color import get_theme_accent
@@ -9594,13 +9595,15 @@ class _DevSyncPullWorker(QThread):
     的 docstring 早就写着「本函数跑在 devsync 后台线程」，而实际并不存在这个
     后台线程，注释与实现长期背离。
 
-    信号（全部跨线程回主线程，主线程只做 setText，零阻塞）：
-      * ``progress(str)``    — 阶段文案
-      * ``swapped(str)``     — 切换完成，参数=新的本地 src 路径（调用方续重启）
-      * ``failed(str)``      — 失败原因（调用方恢复 UI 并提示，绝不退出程序）
+    信号（全部跨线程回主线程，主线程只做 setText/setValue，零阻塞）：
+      * ``progress(str)``      — 阶段文案
+      * ``progress_value(int)``— 拉取百分比 0–100（驱动进度条）
+      * ``swapped(str)``       — 切换完成，参数=新的本地 src 路径（调用方续重启）
+      * ``failed(str)``        — 失败原因（调用方恢复 UI 并提示，绝不退出程序）
     """
 
     progress = pyqtSignal(str)
+    progress_value = pyqtSignal(int)
     swapped = pyqtSignal(str)
     failed = pyqtSignal(str)
 
@@ -9632,15 +9635,19 @@ class _DevSyncPullWorker(QThread):
                              "（确认笔记本开机、已开共享、掌机与它同一局域网）")
             return
 
-        # 1) 拷到临时目录（不直接覆盖正在用的 _ext/src）
+        # 1) 拷到临时目录（不直接覆盖正在用的 _ext/src）。
+        #    用带真实进度回传的拷贝：后台线程里跑 Popen，边拷边数目标目录文件
+        #    数，把 0–85% 的进度推给主线程的进度条——让用户看清「同步到哪了」，
+        #    而不是一个空转的转圈。
         self.progress.emit("正在拉取源码（robocopy，可能要几十秒）…")
+        self.progress_value.emit(3)
         if os.path.isdir(self._tmp):
             shutil.rmtree(self._tmp, ignore_errors=True)
         t0 = time.monotonic()
-        rc = _devsync_robocopy(self._share_src, self._tmp,
-                               ["/MIR", "/XD", "__pycache__"])
+        rc = self._copy_with_progress(self._share_src, self._tmp)
         _devsync_log("[pull] robocopy rc=" + str(rc) +
                      " cost=%.1fs" % (time.monotonic() - t0))
+        self.progress_value.emit(90)
         if rc >= 8:
             self.failed.emit("拉取失败（robocopy 返回 " + str(rc) +
                              "；rc>=8 表示有文件没拷成功，详见 logs/devsync.log）")
@@ -9648,6 +9655,7 @@ class _DevSyncPullWorker(QThread):
 
         # 2) 编译校验（决策 1：坏同步不锁死掌机）
         self.progress.emit("正在编译校验新源码…")
+        self.progress_value.emit(92)
         bad = _devsync_compile_check(self._tmp)
         _devsync_log("[pull] compile bad=" + str(len(bad)))
         if bad:
@@ -9692,8 +9700,54 @@ class _DevSyncPullWorker(QThread):
 
         _devsync_log("[pull] swapped ok -> " + self._dst)
         self._write_swap_marker()
+        self.progress_value.emit(100)
         self.progress.emit("源码已更新，正在重启…")
         self.swapped.emit(self._dst)
+
+    def _count_files(self, folder: str) -> int:
+        """统计目录下文件总数（不含 __pycache__），用于算拷贝进度百分比。"""
+        n = 0
+        try:
+            for _root, dirs, files in os.walk(folder):
+                dirs[:] = [d for d in dirs if d != "__pycache__"]
+                n += len(files)
+        except Exception:  # noqa: BLE001
+            pass
+        return n
+
+    def _copy_with_progress(self, src: str, dst: str) -> int:
+        """带真实进度回传的 robocopy：后台线程跑 Popen，边拷边数目标目录文件。
+
+        与模块级 ``_devsync_robocopy`` 的区别：后者同步 ``wait`` 到底、期间
+        无法回传任何进度；这里在 Popen 存活期间每 250ms 数一次 ``dst`` 的文件数，
+        线性映射到 5–90% 推给主线程的进度条。空源目录直接走无轮询版本，
+        避免 0 除。超时（120s）仍强制回收 robocopy 子树，行为与旧函数一致。
+        """
+        total = self._count_files(src)
+        if total == 0:
+            return _devsync_robocopy(src, dst, ["/MIR", "/XD", "__pycache__"])
+        try:
+            proc = subprocess.Popen(
+                ["robocopy", src, dst, "/MIR", "/XD", "__pycache__"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:  # noqa: BLE001
+            return 16
+        deadline = time.monotonic() + 120
+        while True:
+            rc = proc.poll()
+            if rc is not None:
+                return int(rc)
+            if time.monotonic() > deadline:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except Exception:  # noqa: BLE001
+                    pass
+                return 16
+            copied = self._count_files(dst)
+            pct = 5 + int(85 * min(copied, total) / total)
+            self.progress_value.emit(pct)
+            time.sleep(0.25)
 
     def _write_swap_marker(self) -> None:
         """写「切换待确认」哨兵（约定与 ``run.py:_ext_src_self_heal`` 成对）。
@@ -9865,6 +9919,22 @@ class DevSyncEditPanel(QWidget):
         self._status_lbl.setStyleSheet("color:#aeb9c9; font-size:12px;")
         root.addWidget(self._status_lbl)
 
+        # 拉取进度条：平时隐藏，点「拉取源码并重启」后显示并实时推进，
+        # 让用户看清同步到哪了（不再是一个空转的转圈）。
+        self._progress_bar = QProgressBar()
+        self._progress_bar.setRange(0, 100)
+        self._progress_bar.setValue(0)
+        self._progress_bar.setTextVisible(False)
+        self._progress_bar.setFixedHeight(12)
+        self._progress_bar.setStyleSheet(
+            "QProgressBar{background: rgba(255,255,255,0.08); border:none;"
+            " border-radius:6px;}"
+            "QProgressBar::chunk{background: qlineargradient("
+            "x1:0,y1:0,x2:1,y2:0, stop:0 #3fb6ff, stop:1 #aaff66);"
+            " border-radius:6px;}")
+        self._progress_bar.setVisible(False)
+        root.addWidget(self._progress_bar)
+
         root.addStretch(1)
 
         # 主操作：拉取并重启
@@ -10007,8 +10077,14 @@ class DevSyncEditPanel(QWidget):
         if self._pull_worker is not None and self._pull_worker.isRunning():
             return  # 正在拉，防重复点击
         self._set_busy(True)
+        try:
+            self._progress_bar.setVisible(True)
+            self._progress_bar.setValue(0)
+        except Exception:  # noqa: BLE001
+            pass
         self._pull_worker = _DevSyncPullWorker(share, src, dst, self)
         self._pull_worker.progress.connect(self._on_pull_progress)
+        self._pull_worker.progress_value.connect(self._on_pull_progress_value)
         self._pull_worker.swapped.connect(self._on_pull_swapped)
         self._pull_worker.failed.connect(self._on_pull_failed)
         self._pull_worker.finished.connect(self._on_pull_finished)
@@ -10017,8 +10093,20 @@ class DevSyncEditPanel(QWidget):
     def _on_pull_progress(self, msg: str) -> None:
         self._set_status("⏳ " + msg, True)
 
+    def _on_pull_progress_value(self, pct: int) -> None:
+        try:
+            self._progress_bar.setVisible(True)
+            self._progress_bar.setValue(max(0, min(100, pct)))
+        except Exception:  # noqa: BLE001
+            pass
+
     def _on_pull_failed(self, msg: str) -> None:
         self._set_status("❌ " + msg, False)
+        try:
+            self._progress_bar.setVisible(False)
+            self._progress_bar.setValue(0)
+        except Exception:  # noqa: BLE001
+            pass
         self._set_busy(False)
 
     def _on_pull_finished(self) -> None:
@@ -10027,6 +10115,10 @@ class DevSyncEditPanel(QWidget):
 
     def _on_pull_swapped(self, dst: str) -> None:
         """源码切换完成 → 记住共享路径 → 起新进程加载新源码。"""
+        try:
+            self._progress_bar.setValue(100)
+        except Exception:  # noqa: BLE001
+            pass
         # 顺手把共享路径写进配置，下次打开不用再填。
         try:
             cfg = self._load_cfg()
