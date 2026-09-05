@@ -327,6 +327,31 @@ def iter_pids_by_name(name: str, exact: bool = True) -> list[int]:
     return out
 
 
+# --------------------------------------------------------------------------
+# resume_ex() 的结构化结局
+# --------------------------------------------------------------------------
+# ``resume()`` 只有一个 bool，把「进程早就不存在了」和「真的没解开」压成同一个
+# False。调用方（冻结卡片的解冻 worker）拿它做 ``ok = ok and r`` 一票否决，于是
+# 冻结组里只要有一个**早已失效、PID 已被复用**的成员就会让整组报失败 —— 哪怕
+# 主进程其实已经解冻成功（实测：403 个进程里 158 个≈39% 无法 OpenProcess，
+# PID 一旦被复用到受保护进程就每次必失败）。
+#
+# 结局分五类，让调用方能区分对待：
+#   RES_RESUMED  真的调用了 NtResumeProcess 并成功（含"内核确认已恢复"）
+#   RES_RUNNING  内核确认本来就没挂起，无需恢复
+#   RES_GONE     进程已不存在（PID 失效）—— **不算失败**，调用方只提示
+#   RES_DENIED   进程在，但打不开句柄（受保护 / 权限）—— 真失败
+#   RES_FAILED   句柄拿到了，但 NtResumeProcess 返回非 0
+RES_RESUMED = "resumed"
+RES_RUNNING = "running"
+RES_GONE = "gone"
+RES_DENIED = "denied"
+RES_FAILED = "failed"
+
+#: 调用方视为「这一步没问题」的结局（gone 不计入失败）。
+RES_OK = (RES_RESUMED, RES_RUNNING, RES_GONE)
+
+
 class ProcessManager(ExternalAdapter, abc.ABC):
     @abc.abstractmethod
     def suspend(self, pid: int) -> bool: ...
@@ -372,6 +397,39 @@ class ProcessManager(ExternalAdapter, abc.ABC):
         由 Win32 实现（NtQuerySystemInformation）与 Mock（内存集合）覆写。
         """
         return None
+
+    # -- 结构化恢复 / PID 可达性（非抽象：默认退化） --------------------
+    def note_suspended(self, pid: int) -> None:
+        """把 ``pid`` 登记进内存账本 = 「本工具挂起过它」。
+
+        用于跨会话恢复：NBJ 重启后 ``_suspended`` 是空的，而持久化的冻结组
+        里记录的全是我们自己挂起的进程。不补登记的话，``resume_ex`` 会退回
+        纯内核判据（对复杂进程极易误判为「没挂」）而跳过恢复 —— 即「假解冻」。
+        """
+        try:
+            self._suspended.add(int(pid))  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+    def pid_reachability(self, pid: int) -> str:
+        """``'alive'`` / ``'gone'`` / ``'denied'``。基类默认 ``'alive'``。"""
+        return "alive"
+
+    def pid_table(self) -> dict[int, str]:
+        """当前系统的 ``{pid: 映像名}``。基类无从得知，返回空表；由 Win32
+        （真实直扫）与 Mock（自己注入的 processes）覆写。"""
+        return {}
+
+    def pid_exists(self, pid: int) -> bool:
+        """默认实现：查 :meth:`pid_table`。子类可覆写以加缓存/兜底。"""
+        try:
+            return int(pid) in self.pid_table()
+        except Exception:
+            return False
+
+    def resume_ex(self, pid: int, restore_window: bool = True) -> str:
+        """结构化恢复；默认退化实现把 ``resume()`` 的 bool 翻译回结局。"""
+        return RES_RESUMED if self.resume(pid) else RES_FAILED
 
 
 class Win32ProcessManager(ProcessManager):
@@ -701,12 +759,21 @@ class Win32ProcessManager(ProcessManager):
                 return False
             try:
                 # 幂等（计数器防护）：NtSuspendProcess 与 SuspendThread 一样是
-                # 计数器语义 —— 对已挂起的进程再挂一次，之后一次
-                # NtResumeProcess 解不开（休眠恢复后用户重新点冻结就是这个
-                # 现场：「窗口拉回来了但依旧冻结」）。内核说已经挂着，就绝不再
-                # 叠加：True 跳过、None（查询失败/偶发）也按「可能已挂」跳过，
-                # 绝不二次叠加 —— 否则计数被推到 2，单次 resume 永远解不开。
-                if self.is_suspended_native(pid) is not False:
+                # 计数器语义 —— 对已挂起的进程再挂一次，计数被推到 2，之后
+                # 单次 NtResumeProcess 解不开。
+                #
+                # 2026-09-02 曾把守卫写成 ``is not False``，把「查询失败
+                # (None)」也当成「已挂起」而跳过 —— 结果是**假冻结**：查询
+                # 一失败就根本不调 NtSuspendProcess，UI 却照常显示「已冻结」
+                # 并把窗口最小化、搬到后台桌面，进程其实还在全速跑。
+                # 假冻结的危害（用户完全被蒙在鼓里）远大于叠加（已有
+                # resume_ex 的抽干循环兜底），故这里收紧为：
+                #   * 内核明确说已挂起(True)          -> 跳过
+                #   * 查询失败(None) 且账本里有它      -> 跳过（大概率真挂着）
+                #   * 其余（含查询失败且账本里没有）    -> 真的挂
+                native = self.is_suspended_native(pid)
+                if native is True or (native is None
+                                      and pid in self._suspended):
                     self._suspended.add(pid)
                     return True
                 # 先最小化，再挂起。被挂起的进程其窗口线程无法处理 SC_MINIMIZE
@@ -724,8 +791,168 @@ class Win32ProcessManager(ProcessManager):
             pass
         return False
 
+    def pid_table(self) -> dict[int, str]:
+        """当前系统的 ``{pid: 映像名}``（无会话过滤的直扫）。
+
+        抽成方法是为了可替换：Mock / 测试替身覆写它即可脱离真实 ctypes，
+        让自己的虚拟进程表成为权威（否则冻结组的失效 PID 剪枝在测试里会把
+        所有虚构 PID 都当成"进程已消失"而误删）。结果带 1s TTL 缓存，避免
+        逐 PID 重复全系统扫描。
+        """
+        now = time.time()
+        cache = Win32ProcessManager._PID_TABLE_CACHE
+        if cache is not None and (now - Win32ProcessManager._PID_TABLE_TS) \
+                < Win32ProcessManager._PID_TABLE_TTL_S:
+            return cache
+        try:
+            table = {int(p): nm for p, nm in iter_processes_native()}
+        except Exception:
+            table = {}
+        Win32ProcessManager._PID_TABLE_CACHE = table
+        Win32ProcessManager._PID_TABLE_TS = now
+        return table
+
+    _PID_TABLE_CACHE: dict[int, str] | None = None
+    _PID_TABLE_TS: float = 0.0
+    _PID_TABLE_TTL_S = 1.0
+
+    def pid_exists(self, pid: int) -> bool:
+        """``pid`` 对应的进程现在还存在吗（无会话过滤的直扫）。
+
+        命中 PID 表缓存时很快；**未命中时必须再直扫一次确认** —— 缓存有
+        1 s TTL，刚启动的进程可能还没进缓存，若据此直接判「不存在」，
+        ``resume_ex`` 会把它当成 gone 而跳过恢复，进程就白白冻在内核里。
+        假阴性（漏解冻）的代价远大于多扫一次的开销。
+        """
+        pid = int(pid or 0)
+        if pid <= 0:
+            return False
+        try:
+            if pid in self.pid_table():
+                return True
+        except Exception:
+            pass
+        try:
+            for p, _nm in iter_processes_native():
+                if int(p) == pid:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def pid_reachability(self, pid: int) -> str:
+        """``'alive'`` / ``'gone'`` / ``'denied'``。
+
+        * ``gone``   —— 进程已不在系统进程列表（PID 失效 / 早已退出）
+        * ``denied`` —— 进程在，但 ``OpenProcess(PROCESS_SUSPEND_RESUME)`` 失败
+                        （受保护进程，或 PID 已被系统复用到受保护进程）
+        * ``alive``  —— 在，且能拿到句柄
+
+        实测依据：Windows 上约 39% 的进程属于 ``denied``（svchost / csrss /
+        lsass / dwm / Secure System / fontdrvhost / 各类驱动服务）。冻结组里
+        一旦残留一个这样的 PID，旧逻辑就会让**整组**解冻失败（而主进程其实
+        已经恢复成功了）。用无会话过滤的直扫判定存活，避免会话过滤误判。
+        """
+        pid = int(pid or 0)
+        if pid <= 0:
+            return "gone"
+        if not self.pid_exists(pid):
+            return "gone"
+        h = self._handle(pid)
+        if not h:
+            return "denied"
+        try:
+            self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return "alive"
+
+    def resume_ex(self, pid: int, restore_window: bool = True) -> str:
+        """恢复 ``pid``，返回 ``RES_*`` 结局之一（语义见模块顶部常量）。
+
+        ``restore_window`` 含义同 :meth:`resume`。
+
+        与旧版 bool 返回的关键差别：把「进程已经不存在（``gone``）」从失败里
+        摘出来。旧版 ``ok = all(resume(...))`` 会把一个早已失效的陈旧 PID 当成
+        硬失败，一票否决整组 —— 用户看到的就是「窗口被拉回当前桌面了，然后
+        报解冻失败」。
+        """
+        if self._ntdll is None or self._kernel32 is None:
+            return RES_FAILED
+        pid = int(pid or 0)
+        if pid <= 0:
+            return RES_GONE
+
+        reach = self.pid_reachability(pid)
+        if reach == "gone":
+            # 进程已不存在：它不再需要解冻，这**不是**失败。同步掉账本即可。
+            self._suspended.discard(pid)
+            return RES_GONE
+        if reach == "denied":
+            # 进程在但打不开句柄：真失败（受保护 / PID 被复用），保留账本。
+            return RES_DENIED
+
+        h = self._handle(pid)
+        if not h:
+            return RES_DENIED
+        try:
+            # 幂等判定：**仅当**内存账本里没有它（说明不是本工具挂的）**且**
+            # 内核明确说没挂起，才判定「无需恢复」。二者任一存疑都必须真的
+            # 调用 NtResumeProcess —— 否则就是「假解冻」：进程仍冻在内核里、
+            # 账本却已清空，用户再冻结就把挂起计数叠到 2，单次 resume 永远
+            # 解不开（这正是 2026-09-02 那次修复没能根除的病根）。
+            # 判据之所以不能全信：它要求「所有线程 State==Waiting 且
+            # WaitReason==Suspended」，而 Windows 自己就会用 PLM 挂起 UWP
+            # 进程、游戏也会自己 SuspendThread，复杂进程极易出现部分线程
+            # 状态不一致 -> 误判为「没挂」。
+            ledger = pid in self._suspended
+            native = self.is_suspended_native(pid)
+            if native is False and not ledger:
+                if restore_window:
+                    self._set_window_state(pid, False)
+                return RES_RUNNING
+            # 计数器语义抽干：NtResumeProcess 每次仅把内核挂起计数 -1，
+            # 若此前被叠加挂起（计数到 2+），单次调用解不开。循环直到内核
+            # 确认已恢复（上限 8 次防极端/权限死循环）。
+            #
+            # ``force`` = 账本说这是我们挂的 —— 那么**第一轮无条件真调一次**
+            # NtResumeProcess，不先问判据。因为判据可能正误判为「没挂」，
+            # 若照旧先问就直接 break 了，等于一次都没解 —— 假解冻原地复发。
+            ret = 1
+            force = bool(ledger)
+            for _ in range(8):
+                if not force and self.is_suspended_native(pid) is False:
+                    ret = 0
+                    break
+                force = False
+                try:
+                    ret = self._ntdll.NtResumeProcess(h)
+                except Exception:
+                    ret = 1
+                    break
+                if ret != 0:
+                    break  # 系统调用失败：立即停止空转，如实回报
+            if ret == 0:
+                self._suspended.discard(pid)
+                if restore_window:
+                    self._set_window_state(pid, False)
+                return RES_RESUMED
+            # 抽干 8 次仍挂着 / 调用失败：如实回报失败并保留账本，
+            # 让 HUD 知道解冻未完成、可重试，而不是假装成功。
+            return RES_FAILED
+        except Exception:
+            return RES_FAILED
+        finally:
+            try:
+                self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+
     def resume(self, pid: int, restore_window: bool = True) -> bool:
         """Resume ``pid``'s threads (``NtResumeProcess``).
+
+        向后兼容的 bool 版，等价于 ``resume_ex(...) in RES_OK`` ——
+        即 ``gone``（进程已不存在）**算成功**：它无需解冻，不该拖累整组。
 
         ``restore_window=True`` (default) additionally restores + activates the
         process's visible windows (``SW_RESTORE``) — the historical behaviour.
@@ -738,49 +965,7 @@ class Win32ProcessManager(ProcessManager):
         them via :meth:`restore_window` — at which point they are already on
         the user's desktop and cannot yank the desktop away.
         """
-        if self._ntdll is None or self._kernel32 is None:
-            return False
-        try:
-            h = self._handle(pid)
-            if not h:
-                return False
-            try:
-                # 幂等（计数器防护）：内核说它根本没挂起，就不空转
-                # NtResumeProcess —— 空转本身无害，但把「没挂」当「已恢复」
-                # 会掩盖账本脱节；这里直接按已恢复处理并同步账本。
-                if self.is_suspended_native(pid) is False:
-                    self._suspended.discard(pid)
-                    if restore_window:
-                        self._set_window_state(pid, False)
-                    return True
-                # 计数器语义抽干：NtResumeProcess 每次仅把内核挂起计数 -1，
-                # 若此前被叠加挂起（典型来源：suspend 在 is_suspended_native
-                # 返回 None 时误叠加，计数到 2），单次调用解不开 —— 进程仍冻
-                # 在内核里、账本却已清空，表现为「冻结后无法解冻恢复」。这里
-                # 循环调用直到内核确认已恢复（上限 8 次防极端/权限死循环）。
-                ret = 1
-                for _ in range(8):
-                    if self.is_suspended_native(pid) is False:
-                        ret = 0
-                        break
-                    try:
-                        ret = self._ntdll.NtResumeProcess(h)
-                    except Exception:
-                        ret = 1
-                        break
-                if ret == 0:
-                    self._suspended.discard(pid)
-                    if restore_window:
-                        self._set_window_state(pid, False)
-                    return True
-                # 抽干 8 次仍挂着 / 系统调用失败：如实回报失败并保留账本，
-                # 让 HUD 知道解冻未完成、可重试，而不是假装成功。
-                return False
-            finally:
-                self._kernel32.CloseHandle(h)  # type: ignore[attr-defined]
-        except Exception:
-            pass
-        return False
+        return self.resume_ex(pid, restore_window) in RES_OK
 
     def restore_window(self, pid: int) -> None:
         """Restore + activate ``pid``'s visible windows (``SW_RESTORE``).
@@ -842,7 +1027,12 @@ class Win32ProcessManager(ProcessManager):
                     self._SYS_PROC_INFO_CLASS, buf, size, None)
                 if ret == 0:
                     break
-                if ret == self._STATUS_INFO_LEN_MISMATCH:
+                # ⚠ NTSTATUS 是 32 位**无符号**，而本函数未设 restype ——
+                # ctypes 默认返回【有符号 c_int】，缓冲区不足时拿到的是
+                # -1073741820 而不是 0xC0000004。直接与无符号常量比较永远
+                # 不成立，于是缓冲区永不翻倍重试、函数直接 return None
+                # （实测确认：见 _diag_ntqsi.py）。必须先掩回 32 位。
+                if (ret & 0xFFFFFFFF) == self._STATUS_INFO_LEN_MISMATCH:
                     size *= 2
                     continue
                 return None
@@ -1088,7 +1278,8 @@ class MockProcessManager(ProcessManager):
     """Records suspend/resume/start/stop calls; fully controllable process list."""
 
     def __init__(self, processes: list[ProcessInfo] | None = None,
-                 exe_paths: dict[str, str] | None = None) -> None:
+                 exe_paths: dict[str, str] | None = None,
+                 denied_pids: set[int] | None = None) -> None:
         self.suspended: set[int] = set()
         self.resumed: set[int] = set()
         self.started: list[str] = []
@@ -1097,6 +1288,9 @@ class MockProcessManager(ProcessManager):
         # image-name -> full path, used by find_exe_path_by_name (tests inject
         # e.g. {"losslessscaling.exe": "C:\\LS\\losslessscaling.exe"}).
         self.exe_paths: dict[str, str] = dict(exe_paths or {})
+        # 模拟「进程在但 OpenProcess 被拒」的 PID（受保护/被复用），用于
+        # 覆盖解冻组里失效成员不再一票否决的行为。
+        self.denied_pids: set[int] = set(denied_pids or ())
 
     @property
     def available(self) -> bool:
@@ -1106,10 +1300,45 @@ class MockProcessManager(ProcessManager):
         self.suspended.add(pid)
         return True
 
-    def resume(self, pid: int, restore_window: bool = True) -> bool:
+    def note_suspended(self, pid: int) -> None:
+        """Mock 的账本就是 ``suspended`` 集合（见 :meth:`resume_ex`）。"""
+        self.suspended.add(int(pid))
+
+    def pid_table(self) -> dict[int, str]:
+        """Mock 的权威进程表就是自己注入的 ``processes``。"""
+        return {int(getattr(p, "pid", 0) or 0): getattr(p, "name", "")
+                for p in self.processes}
+
+    def pid_reachability(self, pid: int) -> str:
+        pid = int(pid or 0)
+        if pid <= 0:
+            return "gone"
+        if pid in self.denied_pids:
+            return "denied"
+        if any(int(getattr(p, "pid", 0) or 0) == pid for p in self.processes):
+            return "alive"
+        # Mock 世界：只 suspend 过、没登记进 processes 的也算存活（大量测试
+        # 只驱动 suspend/resume 而不构造进程列表）。
+        if pid in self.suspended:
+            return "alive"
+        return "gone"
+
+    def resume_ex(self, pid: int, restore_window: bool = True) -> str:
+        pid = int(pid or 0)
+        reach = self.pid_reachability(pid)
+        if reach == "gone":
+            # 进程已不存在：无需解冻，不算失败（与 Win32 实现保持一致）。
+            self.resumed.add(pid)
+            self.suspended.discard(pid)
+            return RES_GONE
+        if reach == "denied":
+            return RES_DENIED
         self.resumed.add(pid)
         self.suspended.discard(pid)
-        return True
+        return RES_RESUMED
+
+    def resume(self, pid: int, restore_window: bool = True) -> bool:
+        return self.resume_ex(pid, restore_window) in RES_OK
 
     def restore_window(self, pid: int) -> None:
         pass
