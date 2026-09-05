@@ -35,7 +35,7 @@ from ..core.navigation import (
     set_control_focus_visual,
 )
 
-from ..platform.process_manager import ProcessManager, exe_path_of_pid
+from ..platform.process_manager import ProcessManager
 from ..platform.virtual_desktop import VirtualDesktopManager
 from ..platform.win_hwnd import related_pids
 from .base import BlockBlueprint
