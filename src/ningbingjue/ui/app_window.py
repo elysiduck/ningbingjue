@@ -5531,71 +5531,97 @@ class _OverlayWindow(QWidget):
             self._prev_game_hwnd = 0
 
     def _return_to_game(self) -> None:
-        """手柄 Start（HUD 已在屏上时）：把 HUD 收进托盘；若记到了有效且**未冻结**的游戏窗口，则先把焦点还给它。
+        """手柄 Start（HUD 已在屏上时）：收起 HUD；**仅在允许时**才把焦点还给游戏窗口。
 
-        游戏被冻结（suspended）时**绝不**抢焦点、也**绝不**解冻——只收起 HUD，
-        让游戏安静停在后台暂停态（用户要的是『只最小化 NBJ，保持冻结』；且把
-        焦点交给挂起窗口正是历史『卡死』死局）。解冻请走冻结卡片的数字键。
+        焦点交还的前提（见 ``_is_focus_handover_allowed``）：当前前台窗口必须是
+        凝冰结魄自己，或者就是记忆里的那个游戏窗口本身。除此之外一律只收起
+        HUD，绝不动任何第三方窗口。
 
-        关键时序——在 HUD 仍处前台时先用 ``ShowWindow(SW_RESTORE)`` 恢复游戏
-        窗口：因为当前进程是前台进程，Windows 允许它把焦点转让给目标窗口，于是
-        游戏干净地回到前台（绕开前台锁，比事后强抢稳定得多）；随后再把 HUD 淡出
-        隐藏到托盘。这正是『独占全屏游戏被 HUD 抢焦点最小化』的反向操作：不再去
-        抢焦点最小化游戏，而是主动把焦点让回游戏（也就是用户要的『一键回游戏』）。
+        为什么必须加这道判定（2026-09-09 修复的严重 bug）：NBJ 可见但失焦时
+        手柄监听是**刻意保持运行**的（``_ensure_gamepad`` 注释："background
+        gamepad still listens"、"even when another window is on top, so
+        background shortcuts / Start still work"）。于是 NBJ 缩在后台、用户正在
+        用别的程序时按 Start，旧代码会无条件 ``SetForegroundWindow(
+        _prev_game_hwnd)``，把一个早已切走的后台进程硬拽到前台——表现为『NBJ
+        在后台，按 Start 却把另一个进程召唤到前台』。HWND 还可能被系统复用，
+        拽上来的甚至不是原来那个进程。
+
+        游戏被冻结（suspended）时同样**绝不**抢焦点、也**绝不**解冻——只收起
+        HUD，让游戏安静停在后台暂停态（用户要的是『只最小化 NBJ，保持冻结』；
+        且把焦点交给挂起窗口正是历史『卡死』死局）。解冻请走冻结卡片的数字键。
+
+        关键时序——允许交还时，在 HUD 仍处前台的情况下先用 ``ShowWindow(
+        SW_RESTORE)`` 恢复游戏窗口：因为当前进程是前台进程，Windows 允许它把
+        焦点转让给目标窗口，于是游戏干净地回到前台（绕开前台锁，比事后强抢
+        稳定得多）；随后再把 HUD 淡出隐藏到托盘。
 
         没有可回的游戏窗口时（记忆失效/重启后清空/从未召唤 HUD 记录过游戏），
-        也照样把 HUD 收进托盘——只是不再复原任何原窗口。满足『任何时候（包括
-        没打开过任何窗口）按 Start 都能收起 HUD』的用户要求。
+        或交还被拒绝时，也照样把 HUD 收进托盘——只是不再复原任何原窗口。满足
+        『任何时候（包括没打开过任何窗口）按 Start 都能收起 HUD』的要求。
 
         best-effort：任何异常都不影响游戏本体的前台状态。
         """
         try:
             game_hwnd = self._resolve_game_hwnd()
-            if game_hwnd:
-                # 游戏若被冻结（suspended）：绝不恢复窗口 / 抢焦点 / 解冻——
-                # 把焦点交给一个无法 pump 消息的挂起窗口正是历史『卡死』死局，
-                # 且解冻会偷改用户明确的冻结状态（用户要的是『只最小化 NBJ，
-                # 保持冻结』）。故冻结时只收起 HUD，游戏安静停在后台暂停态。
-                if not self._is_game_frozen(game_hwnd):
-                    user32 = ctypes.windll.user32
-                    # HUD 仍是前台时恢复游戏 → 焦点自然让渡，绕开前台锁。
-                    user32.ShowWindow(game_hwnd, 9)  # SW_RESTORE = 9
-                    user32.SetForegroundWindow(game_hwnd)
+            if game_hwnd and self._is_focus_handover_allowed(game_hwnd):
+                user32 = ctypes.windll.user32
+                # HUD 仍是前台时恢复游戏 → 焦点自然让渡，绕开前台锁。
+                user32.ShowWindow(game_hwnd, 9)  # SW_RESTORE = 9
+                user32.SetForegroundWindow(game_hwnd)
         except Exception:  # noqa: BLE001
             pass
-        # HUD 收进托盘（淡出后隐藏）。无论是否有可恢复的游戏窗口都执行——
+        # HUD 收进托盘（淡出后隐藏）。无论是否交还了焦点都执行——
         # 用户要求『未按过/没打开过窗口时按 Start 也要最小化』。
         try:
             self._minimize_to_tray()
         except Exception:  # noqa: BLE001
             pass
 
-    def _restore_game_only(self) -> None:
-        """HUD 已隐藏时，Start 只负责把『被最小化的游戏窗口』恢复到前台，不召唤 HUD。
+    def _is_focus_handover_allowed(self, game_hwnd: int) -> bool:
+        """Start 是否允许把焦点交还给 ``game_hwnd``（记忆里的游戏窗口）。
 
-        游戏被冻结时直接返回：保持冻结、不抢焦点、不解冻（与 ``_return_to_game``
-        一致）。想恢复暂停的游戏，请先在冻结卡片里手动解冻。
+        全部满足才放行：
 
-        仅 best-effort：记不到有效游戏窗口（``_prev_game_hwnd`` 缺失、或句柄已
-        失效/被复用/属于桌面外壳）就什么都不做——既不 fallback 抢当前前台窗口
-        （重启掌机后会误拉起『关机前的程序』），也绝不召唤 HUD，因为召唤是全局
-        热键（Win+Ctrl+F8）的职责，Start 严格只做『回到游戏』。
+        * 该窗口所属进程**没有**被冻结（冻结时交焦点 = 历史『卡死』死局）；
+        * 当前前台窗口要么是凝冰结魄自己（含它自己的 dock 弹窗，按 PID 判定），
+          要么就是 ``game_hwnd`` 本身。
+
+        其它任何情况一律拒绝。**绝不**因为『记忆里有这个 HWND』就把一个后台的
+        第三方窗口拽到前台——那正是 2026-09-09 修复的『NBJ 在后台按 Start 却
+        召唤出别的进程』的根因。附带好处：即使 HWND 已被系统复用，复用者也
+        拿不到焦点，因为它此刻并不是前台窗口。
+
+        为什么不用 ``isActiveWindow()`` 硬卡『NBJ 必须在前台』：独占全屏游戏会
+        抢走焦点，此时 HUD 可见但并非 active window，硬卡会让 Start 收不掉 HUD
+        （只能摸键盘按热键）。而全屏游戏场景下前台窗口就是 ``game_hwnd`` 本身，
+        本判据照常放行，『一键回游戏』行为完全不变。
+
+        best-effort：任何异常按『拒绝交还』处理（宁可少做，也不误召唤）。
         """
         try:
-            game_hwnd = self._resolve_game_hwnd()
             if not game_hwnd:
-                return
-            # 游戏若被冻结：保持冻结，不抢焦点、不解冻（同 _return_to_game）。
+                return False
+            # 离屏（自动化测试）不参与抢焦点。
+            if getattr(self, "_offscreen", False):
+                return False
+            # 游戏被冻结：保持冻结，不抢焦点、不解冻（同历史约定）。
             if self._is_game_frozen(game_hwnd):
-                return
+                return False
             user32 = ctypes.windll.user32
-            # SW_RESTORE=9：把被最小化的游戏窗口恢复并交还焦点。HUD 此时已隐藏，
-            # 当前进程不是前台进程，但 SetForegroundWindow 在『用户刚按过键（Start）』
-            # 的短时间内允许（前台锁对最近输入线程宽松），足够把游戏拉回前台。
-            user32.ShowWindow(game_hwnd, 9)
-            user32.SetForegroundWindow(game_hwnd)
+            fg = int(user32.GetForegroundWindow() or 0)
+            if not fg:
+                return False
+            if fg == game_hwnd:
+                return True                      # 游戏本来就在前台
+            if fg == int(self.winId()):
+                return True                      # 用户在 NBJ 上
+            # 自己的 dock 弹窗（FAQ / 按钮列表）拿到焦点时前台 HWND 不是主窗口
+            # ——按 PID 判定，仍算『用户在 NBJ 上』。
+            pid = ctypes.c_ulong(0)
+            user32.GetWindowThreadProcessId(fg, ctypes.byref(pid))
+            return bool(pid.value) and pid.value == os.getpid()
         except Exception:  # noqa: BLE001
-            pass
+            return False
 
     def _resolve_game_hwnd(self) -> int:
         """返回经过校验的『游戏窗口』HWND；无效/失效则返回 0。
@@ -5681,25 +5707,27 @@ class _OverlayWindow(QWidget):
             return False
 
     def _focus_from_start(self) -> None:
-        """Gamepad Start = 一键回游戏：最小化凝冰结魄 + 恢复被最小化的游戏窗口。
+        """Gamepad Start = 一键回游戏（**只在用户确实还在 NBJ 上时才回**）。
 
-        严格语义——Start **绝不**召唤 / 呼出凝冰结魄。HUD 的唤出由全局热键
-        （Win+Ctrl+F8）负责；Start 只做『回到游戏』这一件事：
+        两条硬性语义：
 
-        - HUD 在屏（含『游戏前台、HUD 失焦可见』状态）→ 收起 HUD（最小化到托盘）
-          并把焦点还给游戏窗口（``_return_to_game``）。
-        - HUD 已隐藏/最小化（在托盘）→ 仅 best-effort 把被最小化的游戏窗口恢复
-          到前台（``_restore_game_only``），绝不召唤 HUD——否则会把已『回到游戏』
-          的状态又翻回 HUD，违背『Start 不呼出』的明确要求。
+        1. Start **绝不**召唤 / 呼出凝冰结魄。HUD 的唤出由全局热键
+           （Win+Ctrl+F8）负责。
+        2. HUD 已隐藏 / 已最小化（在托盘）→ **完全无反应**。旧实现在这条分支
+           上会走 ``_restore_game_only`` 把记忆里的游戏窗口拽到前台——用户并不
+           在 NBJ 上却凭空召唤出一个后台进程，与第 1 条『Start 不召唤』自相
+           矛盾，已按用户要求（2026-09-09）删除。
+
+        HUD 在屏 → 收起 HUD；焦点是否交还给游戏由 ``_is_focus_handover_allowed``
+        决定：只有当前前台是 NBJ 自己、或就是那个游戏窗口时才交还，否则**只收起
+        NBJ，绝不碰任何别的窗口**。
         """
         try:
             hud_on_screen = self.isVisible() and not (
                 self.windowState() & Qt.WindowState.WindowMinimized)
-            if hud_on_screen:
-                self._return_to_game()
-            else:
-                # 已隐藏：只恢复游戏窗口（若有记录），绝不召唤 HUD。
-                self._restore_game_only()
+            if not hud_on_screen:
+                return  # 已隐藏/最小化：no-op，绝不召唤任何窗口。
+            self._return_to_game()
         except Exception:  # noqa: BLE001
             pass
 
