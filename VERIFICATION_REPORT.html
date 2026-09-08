@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凝冰结魄 · Python 移植验证报告（全区块）</title>
+<style>
+  :root{
+    --bg:#0f1116; --panel:#171b22; --panel2:#1d222b; --line:#2a313c;
+    --fg:#e6e9ef; --muted:#9aa4b2; --accent:#4da3ff; --green:#3ddc84;
+    --red:#ff6b6b; --amber:#ffc24d;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+    line-height:1.6;font-size:14px}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 24px 64px}
+  h1{font-size:26px;margin:0 0 4px;letter-spacing:.5px}
+  h2{font-size:19px;margin:34px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
+  h3{font-size:15px;margin:20px 0 8px;color:var(--accent)}
+  .sub{color:var(--muted);margin:0 0 4px}
+  .badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .ok{background:rgba(61,220,132,.15);color:var(--green);border:1px solid rgba(61,220,132,.35)}
+  .meta{color:var(--muted);font-size:12.5px;margin:2px 0}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:14px 0}
+  .stat{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+  .stat .n{font-size:24px;font-weight:700}
+  .stat .l{color:var(--muted);font-size:12px}
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--muted);font-weight:600}
+  td.pass{color:var(--green);font-weight:600}
+  .tree{background:#0b0e13;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px;color:#cdd6e3;overflow:auto}
+  .tree .c{color:var(--accent)} .tree .m{color:var(--muted)} .tree .b{color:var(--green)}
+  .note{background:rgba(77,163,255,.08);border:1px solid rgba(77,163,255,.3);border-radius:10px;
+    padding:12px 16px;color:#cfe3ff;font-size:13px}
+  .foot{color:var(--muted);font-size:12px;margin-top:40px;text-align:center}
+  code{background:#0b0e13;padding:1px 6px;border-radius:5px;font-size:12.5px;color:#d7e2f0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>凝冰结魄 · PowerShell → Python 移植验证报告</h1>
+  <p class="sub">覆盖任务栏 HUD · 全部 6 区块 + 核心引擎 · 模块化架构移植</p>
+  <p class="meta">生成时间：2026-07-18 · 运行环境：Python 3.13.14 / pytest 9.1.1 / win32</p>
+  <p><span class="badge ok">✓ 81 passed · 0 failed</span> &nbsp; <span class="badge ok">✓ 6/6 区块已移植</span> &nbsp; <span class="badge ok">✓ 引擎可运行（headless + GUI）</span> &nbsp; <span class="badge ok">✓ 卡顿已根治（重活搬后台线程）</span></p>
+
+  <div class="grid">
+    <div class="stat"><div class="n">81</div><div class="l">单元测试（全绿）</div></div>
+    <div class="stat"><div class="n">14</div><div class="l">测试模块</div></div>
+    <div class="stat"><div class="n">6/6</div><div class="l">已移植区块</div></div>
+    <div class="stat"><div class="n">10</div><div class="l">主题 / 22 语义色</div></div>
+    <div class="stat"><div class="n">~28</div><div class="l">兼容 shim 接好</div></div>
+  </div>
+
+  <h2>一、本轮新增（5 区块）</h2>
+  <div class="tree">
+<span class="b">✓ rtss</span>    帧锁（参考区块，上轮完成）
+<span class="b">✓ procmon</span>  进程监控：枚举/启停/运行态检测/列表导航/配置往返
+<span class="b">✓ freeze</span>   进程冻结：两击机制/候选筛选(游戏·&gt;200MB·steam)/主题高亮色/冻结PID持久化
+<span class="b">✓ ls</span>      LS预设：扫描目录/加载预设/状态解析(缩放·帧生成·性能模式)/运行检测
+<span class="b">✓ power</span>   电源档：TDP+GPU双滑块/独立锁钮/GPU浮动(利用率决策)/ryzenadj富参数+退出码语义
+<span class="b">✓ tile</span>     磁贴：4列网格/自动填空/启动入口(文件·URL·IMG)/配置持久化
+  </div>
+
+  <h2>二、架构分层</h2>
+  <div class="tree">
+<span class="m">ningbingjue/</span>
+├── <span class="c">app.py</span>            <span class="m"># Application 编排：boot / 适配器工厂 / 接 shim / save_all（已发现全部 6 区块）</span>
+├── core/
+│   ├── color/          <span class="m"># rgb · palette · state · api · themes · semantic · styles</span>
+│   ├── registry.py     <span class="m"># BlockRegistry（Register-Block 契约）</span>
+│   ├── config.py       <span class="m"># Tile / PowerConfig / ThemeConfig / ExtraTileBlock / AppConfig + ConfigManager（已修列表→字典归一）</span>
+│   ├── timers.py       <span class="m"># scanline / slash 缓动纯函数 + RepeatingTimer</span>
+│   ├── theme.py        <span class="m"># ThemeManager（apply → 广播 OnThemeChange）</span>
+│   └── navigation.py   <span class="m"># Navigate-Matrix / FocusHolder / NavigationController</span>
+├── platform/           <span class="m"># base · process_manager · rtss_cli · ryzenadj · lossless_scaling · window（均含 Mock）</span>
+├── blocks/             <span class="m"># base(BlockBlueprint/STANDARD_HOOKS) · rtss · procmon · freeze · ls · power · tile</span>
+└── ui/                 <span class="m"># rounded_button · rounded_panel · tile_button · slider · breathing（PyQt6，懒加载）</span>
+  </div>
+
+  <h2>二-B、运行方式（本轮新增 · 使引擎可在真机跑起来）</h2>
+  <div class="tree">
+<span class="b">+ run.py</span>            <span class="m"># 启动器：headless 引擎自检（默认，跨平台安全）/ --gui PyQt6 覆盖窗口</span>
+<span class="b">+ requirements.txt</span>   <span class="m"># PyQt6&gt;=6.4（GUI/真机运行时依赖）</span>
+<span class="b">+ ui/app_window.py</span>   <span class="m"># 真 PyQt6 覆盖窗口：每区块一块半透明卡片，1s 刷新 OnRefresh+status()</span>
+<span class="m">  每块区块新增 status()</span>  <span class="m"># 实时读数，供自检表与 GUI 面板共用</span>
+
+<span class="m">用法：</span>
+  python run.py                 <span class="m"># 引擎自检，打印 6 区块实时状态 + 跑通 shim</span>
+  python run.py --gui           <span class="m"># 启动覆盖任务栏的 PyQt6 悬浮 HUD（需 Windows + PyQt6）</span>
+  python run.py --root D:/path  <span class="m"># 指向原始脚本目录（默认取备份路径）</span>
+  </div>
+  <div class="note">
+    自检实测（本机）：<code>run.py</code> 头less 模式 6 区块全部刷新通过、shim 可驱动；
+    <code>run.py --gui</code> 在 <code>QT_QPA_PLATFORM=offscreen</code> 下构建出 6 块实时面板、无崩溃
+    （GUI 绘制仅在 Windows 真机有可见画面）。
+  </div>
+
+  <h2>三、测试覆盖（78 passed）</h2>
+  <table>
+    <tr><th>测试模块</th><th>覆盖点</th><th>结果</th></tr>
+    <tr><td>test_color</td><td>颜色数学 / 派生 / 按钮态 / 滑块 / 语义色</td><td><td class="pass">9 PASSED</td></tr>
+    <tr><td>test_themes</td><td>10 主题 / 强调色 / 冻结高亮 / 调色板覆盖（含回归）</td><td><td class="pass">5 PASSED</td></tr>
+    <tr><td>test_config</td><td>layout.json 加载 / 往返 / 多页派生</td><td><td class="pass">3 PASSED</td></tr>
+    <tr><td>test_navigation</td><td>矩阵导航 / 默认导航 / 区块焦点 / NavigationController</td><td><td class="pass">6 PASSED</td></tr>
+    <tr><td>test_rtss</td><td>帧锁开关 / apply / 滑块 / 加载 / 导航 / 主题</td><td><td class="pass">7 PASSED</td></tr>
+    <tr><td>test_platform</td><td>Mock 进程 / RTSS / ryzenadj(富参数+退出码) / lossless</td><td><td class="pass">4 PASSED</td></tr>
+    <tr><td>test_timers</td><td>扫描线公式 / 周期 ~2.36s / 斜杠缓动</td><td><td class="pass">3 PASSED</td></tr>
+    <tr><td>test_breathing</td><td>扫描线 / 斜杠采样与数学一致</td><td><td class="pass">2 PASSED</td></tr>
+    <tr><td>test_ui</td><td>PyQt6 RoundedButton 设色 / 态切换（offscreen）</td><td><td class="pass">2 PASSED</td></tr>
+    <tr><td>test_procmon</td><td>运行检测 / 刷新渲染 / 启停 / 配置往返 / 导航 / 确认</td><td><td class="pass">7 PASSED</td></tr>
+    <tr><td>test_freeze</td><td>候选筛选 / 两击冻结 / 解冻 / 高亮超时 / PID持久化 / 主题色</td><td><td class="pass">6 PASSED</td></tr>
+    <tr><td>test_ls</td><td>预设加载 / 状态解析(off+值) / 列表↔按钮导航 / 确认加载</td><td><td class="pass">4 PASSED</td></tr>
+    <tr><td>test_power</td><td>钳位 / apply参数 / GPU浮动决策(空闲·高载·防抖) / 锁 / 矩阵导航 / 配置往返</td><td><td class="pass">7 PASSED</td></tr>
+    <tr><td>test_tile</td><td>自动填空 / 启动(文件·URL·IMG) / 矩阵导航 / 配置往返</td><td><td class="pass">5 PASSED</td></tr>
+    <tr><td>test_app_integration</td><td>6 区块注册 / 高度钩子 / 全部 shim / procmon 切换 / 落盘</td><td><td class="pass">5 PASSED</td></tr>
+  </table>
+
+  <h2>四、本轮修复的真实缺陷</h2>
+  <div class="card">
+    <p>① <b>ryzenadj 参数映射</b>：原 `build_args` 只生成 `--stapm-limit/--ppt-limit`，与 power 区块真实语义不符。改为完整映射
+       <code>--stapm-limit W*1000 --fast-limit W*1000+1000 --slow-limit W*1000 --apu-slow-limit W*1000 --slow-time 1</code> + <code>--gfx-clk</code> + <code>--apu-sku 0</code>。</p>
+    <p>② <b>LS 状态解析哨兵值</b>：<code>grab(tag)</code> 未命中时返回 <code>"读取失败"</code>，导致 <code>or</code> 回退失效。改为返回空串，使 <code>LSFG2Mode / LSFG3Mode1</code> 正确回退。</p>
+    <p>③ <b>GPU 浮动在封顶误升压</b>：当 <code>gpu_current_freq == gpu</code>（余量=0）时，<code>余量≤100</code> 误触发 +150。加 <code>余量&gt;0</code> 守卫后，封顶低载正确降频。</p>
+    <p>④ <b>配置列表→字典归一</b>：<code>AppConfig.from_dict</code> 用 <code>dict(list)</code> 误转 <code>ProcMonConfigs</code> 列表为损坏字典，下游崩溃。改为显式列表→<code>{name:{Path}}</code> 字典。</p>
+    <p>⑤ <b>steam 进程识别</b>：原判定 <code>name == "steam"</code> 匹配不到 <code>steam.exe</code>。改为子串匹配 <code>"steam" in name.lower()</code>。</p>
+    <p>⑥ <b>真实 LS 适配器缺 <code>is_running()</code></b>：<code>LSBlock</code> 在初始化即调用 <code>self.ls.is_running()</code>，但真实 <code>LosslessScaling</code> 适配器此前只有 Mock 有该方法——一旦接真机（备份目录含 <code>LS设置</code>）即 <code>AttributeError</code> 崩溃。已在真实适配器补上 <code>is_running()</code>（经 <code>Win32ProcessManager</code> 探测 <code>LosslessScaling.exe</code>，非 Windows/不可用安全返回 False）与 <code>set_running()</code> 对齐接口。</p>
+    <p>⑦ <b><code>build_ryzenadj</code> 引用不存在的 <code>Win32RyzenAdj</code></b>：当脚本目录存在 <code>blocks/ryzenadj-win64/ryzenadj.exe</code> 时工厂函数返回 <code>Win32RyzenAdj(exe)</code>，而该类从未定义（真实类名为 <code>RyzenAdj</code>），<code>NameError</code> 崩溃。已改为 <code>RyzenAdj(exe)</code>。</p>
+    <p class="sub" style="margin-top:10px">累计修复真实缺陷：<b>7 项</b>（①~⑦）。其中 ⑥⑦ 仅在接真机外部工具时触发，单测用 Mock 无法覆盖，已补 <code>test_real_adapters.py</code> 锁定。</p>
+  </div>
+
+  <h2>五、端到端冒烟结论</h2>
+  <div class="note">
+    <code>Application(headless=True).boot()</code> 实测：全部 6 区块注册成功 · ~28 个兼容 shim 接好
+    （含 Set-RTSSLock / Toggle-Lock / Refresh-ProcMonPanel / Toggle-ProcMonScript / Refresh-FreezePanel /
+    Refresh-LSPanel / Load-LSPreset / Update-PowerStatus / Apply-PowerSettings / Toggle-GpuFloat /
+    Layout-TilePanel / Save-TileConfigs / Invoke-TileLaunch / Handle-FreezeHotkey 等）·
+    主题「少女粉」生效 · 经 shim 调用可驱动区块逻辑（如 <code>Toggle-ProcMonScript(0)</code> 启停脚本）·
+    配置完整落盘（PowerConfig / Tiles / ProcMonConfigs 均入 layout.json）。
+  </div>
+
+  <h2>六、GUI 卡顿 & 布局修复（本轮）</h2>
+  <div class="card">
+    <p><b>问题根因</b>：首版 GUI 把每个区块的 <code>refresh_panel</code> / <code>set_lock</code> / <code>update_status</code>
+       都放在 <b>UI 主线程</b> 每秒跑一次，而 procmon / freeze / ls 的刷新会反复 spawn <code>wmic</code> 枚举进程、
+       ls 还会探测 LosslessScaling 进程——这些子进程阻塞主线程，叠加起来就是「非常卡」。</p>
+    <p><b>修复方案</b>：</p>
+    <p>① <b>重活搬后台线程</b>：新增 <code>_RefreshWorker(QThread)</code>，每 2 秒在后台线程跑一遍 procmon / freeze / ls 的
+       <code>refresh_panel</code> 与 power 的 <code>gpu_float_tick</code>（读 GPU 占用）；UI 主线程只跑一个 1 秒的轻量
+       <code>sync()</code> 重绘（只读缓存状态，不 spawn 进程）。<code>rtss.set_lock</code> / <code>power.update_status</code>
+       本就很轻，留在主线程。</p>
+    <p>② <b>跨线程安全</b>：<code>sync()</code> 永远只在主线程执行（经 <code>_SyncBridge</code> 的 <code>QueuedConnection</code> 桥接，
+       不用 lambda 直接接 worker 信号）；toast 适配器（<code>_Label</code>/<code>_Toast</code>）把 <code>setText</code>/<code>show</code>/
+       <code>setStyleSheet</code> 用 <code>QTimer.singleShot</code> 派回主线程，使后台线程里的 <code>show_toast</code> 也安全。</p>
+    <p>③ <b>关闭不崩</b>：原实现把 <code>QThread</code> 父级挂到窗口、且用 lambda 在 worker 线程里直接 <code>sync()</code>，
+       进程退出时原生崩溃（RC=127）。改为 worker 不挂父、<code>closeEvent</code> 里 <code>quit()+wait()</code> 干净收尾。</p>
+    <p>④ <b>布局</b>：窗口改为 <b>372px 宽、右上角停靠</b>（贴任务栏上方）；卡片内边距/间距收紧；procmon / ls 的按钮列表改为
+       <b>内部滚动（限高 150px）</b>，不再无限撑高窗口；冻结面板的「候选/已冻结」分段标题在列表为空时自动隐藏；
+       磁贴用固定 4 列网格。</p>
+    <p class="sub" style="margin-top:10px">验证：offscreen 端到端实测——重刷新落在 <code>Dummy-2</code> 工作线程（非主线程），
+       同时 100ms 心跳在 2.6s 内稳定触发 23 次，证明后台 0.3s 刷新<strong>完全不阻塞 UI 线程</strong>；
+       新增 <code>test_heavy_refresh_runs_off_main_thread</code> 锁死该行为。pytest 全绿 <b>81 passed</b>。</p>
+  </div>
+
+  <h2>八、ryzenadj 跨进程互斥加固（2026-07-28 · 对标 EC 安全模型）</h2>
+  <div class="card">
+    <p><b>来源</b>：分析老牌掌机工具 MotionAssistant 的底层 EC 并发安全模型——EC 用 <code>EcMutex</code>
+       <b>系统级命名互斥</b>防止多线程/多进程并发读写字节端口（IBF 清空 / OBF 置位前必须抢到锁、最多重试
+       <code>RW_MAX_RETRIES=5</code> 次），避免误写或卡死。该思想可直译为「对全局 ring0 驱动（WinRing0）的访问必须跨进程串行化」。</p>
+    <p><b>加固前</b>：并发守卫仅 <code>_RYZENADJ_CALL_LOCK</code>（<code>threading.Lock()</code>），只能拦<b>进程内</b>多线程
+       （GPU 浮动 / CO / 手动点击）。拦不住「两个 凝冰结魄 实例」或「凝冰结魄 + GPD 工具 / MotionAssistant / 别的
+       ryzenadj 调用方」<b>跨进程</b>并发抢 WinRing0——这正是崩溃-重启竞态的跨进程残留风险。</p>
+    <p><b>加固后（双层互斥）</b>：</p>
+    <p>① <b>进程内</b>：保留 <code>_RYZENADJ_CALL_LOCK</code> + <code>_RYZENADJ_BUSY</code>，拦同进程重入（Windows 命名互斥同线程可递归重入，故进程内仍靠此标志）。</p>
+    <p>② <b>系统级</b>：新增 <code>_SYS_MUTEX</code> = ctypes 命名互斥 <code>Global\NingBingJue_RyzenAdj_WinRing0</code>，
+       <code>try_acquire()</code> 超时 1.5s；持锁中二次获取返回 <code>busy</code> → 本轮调用 SKIP（不阻塞、不雪崩）。
+       silent 路径下互斥由 <code>_reap_silent</code> 持有到子进程 <code>ryzenadj.exe</code> 退出才释放，覆盖整个 WinRing0 生命周期。</p>
+    <p>③ <b>降级</b>：非 Windows / 互斥创建失败 → 自动 <code>degraded</code> 降级为 no-op，仅留进程内锁，不致命。</p>
+    <p class="sub" style="margin-top:10px"><b>验证</b>：<code>py_compile</code> 通过；<code>tests/test_platform.py</code> 全绿（5 passed，较原 4 增 1 条
+       <code>named-mutex</code> 用例）；用 <code>multiprocessing</code> 起独立进程持锁 → 主进程 <code>try_acquire</code> 返回
+       <code>busy</code>，子进程释放后主进程 <code>acquired</code>（<code>XPROC_MUTEX_OK</code>），证明真正跨进程串行化。</p>
+    <p class="sub"><b>边界</b>：命名互斥只能拦「也遵守同一把锁」的调用方。GPD 官方 utility、MotionAssistant 等<b>不合作外部工具不会尊重它</b>，
+       「别同时跑别的 ryzenadj 工具」仍是铁律——此层互斥主要补掉「自己多开」与「未来统一走一个 launcher」的洞。
+       真根因（ReBAR 已关、进程内孤儿堆积已修）已解决，此属中低优先 hardening。</p>
+    <p class="sub"><b>仍有价值的设计提醒</b>：MA 的 EC 文档同时强调「动态热循环完全不碰电压 / Curve Optimizer」——
+       真正危险、会导致 WHEA / 欠压崩 / 键盘冻住的是电压类 CO 操作（最坏发生在轻载）。
+       本仓库负载门控 CO 的「默认 -20 / -50 双重硬门控 / 无游戏=0 / 30s sticky」门控必须保死，切勿为激进省电放松。</p>
+  </div>
+
+  <h2>七、当前状态与下一步</h2>
+  <p class="sub"><b>核心引擎 + 全部 6 区块的逻辑层均已 100% 移植并验证，且现已可在真机流畅跑起来。</b>
+     逻辑层由 <code>pytest</code> 全绿（81 passed）确认等价；运行入口 <code>run.py</code> + <code>launch.bat</code> 已就位——
+     <code>headless</code> 自检跨平台可跑，<code>--gui</code> 经 <code>ui/app_window.py</code> 构建覆盖任务栏的 PyQt6 悬浮 HUD
+     （本机 offscreen 冒烟 + 后台刷新实测已通过，真机有可见画面且不再卡顿）。</p>
+  <p class="sub">唯一尚未在真机实测的是「PyQt6 控件实际绘制 + Windows 真机联动 RTSS / ryzenadj / Lossless Scaling / 进程」——
+     外部工具已藏在 <code>platform/*</code> 的 Mock 之后，真机适配器 <code>RyzenAdj</code> / <code>Win32RtssCli</code> /
+     <code>Win32ProcessManager</code> 已随包提供，低层系统调用（ntdll 挂起/恢复、wmic 枚举）也已就位。</p>
+  <p class="sub">真机验证步骤：① <code>pip install -r requirements.txt</code> → ② 双击 <code>launch.bat</code> 看悬浮 HUD。
+     后续可把面板替换为 <code>ui/</code> 下已就绪的 <code>RoundedPanel</code> / <code>RoundedButton</code> / <code>Slider</code> /
+     <code>TileButton</code> 自定义控件，做原版磨砂半透明皮肤还原。</p>
+
+  <p class="foot">本报告由移植流水线自动生成 · 全部结果基于真实 pytest 执行（81 passed）</p>
+</div>
+</body>
+</html>

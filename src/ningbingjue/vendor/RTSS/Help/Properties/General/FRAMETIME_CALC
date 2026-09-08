@@ -1,0 +1,19 @@
+Frametime calculation point
+Typical game render loop consists of the following stages:
+
+[A_1]CPU_render[B_1]Frame_presentation[C_1]
+[A_2]CPU_render[B_2]Frame_presentation[C_2]
+...
+[A_n]CPU_render[B_n]Frame_presentation[C_n]
+
+
+A_n points define moments of time when each new frame starts, input is normally sampled at that stage and CPU starts rendering new frame representing 3D world simulated at this timestamp.
+B_n points define moments of time when CPU finish rendering new frame and try to present is via 3D API frame presentation call. 3D API captures and puts 3D command buffers into presentation queue and GPU starts processing it asynchronically since that time.
+C_n points define moments of time when 3D API finish processing frame presentation call and return control back to game render thread. Points C_n effectively match with points An+1, i.e. render loop starts rendering new frame again at the same time.
+Ingame framerate and frametime counters typically define frametime as a difference between A_n and A_n-1 time points of two consequent frames. %PRODUCTNAME% uses the same time points to calculate frametime by default.
+However, some benchmarking applications are are not working at game hook level and have no access to such application specific timings. They can only rely on DXGI frame presentation statistics, so they define frametime slightly differently and calculate it as difference between B_n and B_n-1 time points.
+Frametime, measured this way will not match with frametime measured by ingame performance counters or %PRODUCTNAME% due to its different nature and due to sampling timestamps in different moments of time.
+You may use this option to switch to such frametime calculation model if necessary.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

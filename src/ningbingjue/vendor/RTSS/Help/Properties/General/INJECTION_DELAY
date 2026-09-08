@@ -1,0 +1,7 @@
+Injection delay
+Adjusts delay (in milliseconds) for delayed injection engine. Delayed injection is aimed to bypass On-Screen Display exclusivity check implemented in some other On-Screen Display applications (e.g. 64-bit Steam Overlay) and prevent such applications from blocking their On-Screen Display functionality. Delayed injection engine is user configurable so power user may extend the list of DLL modules triggering delayed injection mechanism and adjust the delay. By default the delayed injection is triggered by 64-bit Steam overlay and Origin In-Game overlay libraries and injection delay is set to 15 seconds if those libraries are loaded in the application address space.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may set delay to 0 to disable delayed injection.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

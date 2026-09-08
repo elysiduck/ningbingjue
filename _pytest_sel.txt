@@ -1,0 +1,38 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\python.exe
+rootdir: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue
+configfile: pyproject.toml
+collecting ... collected 47 items / 44 deselected / 3 selected
+
+tests/test_button_edit.py::test_l2_commit_and_apply_restyles_buttons FAILED [ 33%]
+tests/test_button_edit.py::test_clone_click_selects_key PASSED           [ 66%]
+tests/test_button_edit.py::test_apply_and_refresh_restyles_unbound_selected_button FAILED [100%][safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-f51ef5cf-d8ba-459a-be67-4cfa7f59538f", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-1598bb74-0b0a-4e3d-921c-c1a72377bfdf", "reason": "windows-sandbox-recycle-bin-unavailable"}
+
+
+================================== FAILURES ===================================
+__________________ test_l2_commit_and_apply_restyles_buttons __________________
+tests\test_button_edit.py:217: in test_l2_commit_and_apply_restyles_buttons
+    assert "rgb(255,0,0)" in after_ss, "live button must pick up the bound preset's BackColor"
+E   AssertionError: live button must pick up the bound preset's BackColor
+E   assert 'rgb(255,0,0)' in 'QPushButton { background: transparent; color: rgb(255,255,255); border: none; }'
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+___________ test_apply_and_refresh_restyles_unbound_selected_button ___________
+tests\test_button_edit.py:1151: in test_apply_and_refresh_restyles_unbound_selected_button
+    assert "171,205,239" in target.styleSheet(), \
+E   AssertionError: 应用并刷新画布 must restyle the selected unbound live button
+E   assert '171,205,239' in 'QPushButton { background: transparent; color: rgb(175,130,235); border: none; }'
+E    +  where 'QPushButton { background: transparent; color: rgb(175,130,235); border: none; }' = <built-in method styleSheet of HintButton object at 0x000001D1A740D950>()
+E    +    where <built-in method styleSheet of HintButton object at 0x000001D1A740D950> = <ningbingjue.ui.gamepad_hint.HintButton object at 0x000001D1A740D950>.styleSheet
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_button_edit.py::test_l2_commit_and_apply_restyles_buttons
+FAILED tests/test_button_edit.py::test_apply_and_refresh_restyles_unbound_selected_button
+================= 2 failed, 1 passed, 44 deselected in 30.25s =================
+RC=1

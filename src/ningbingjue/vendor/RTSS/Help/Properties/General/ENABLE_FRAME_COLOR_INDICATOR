@@ -1,0 +1,6 @@
+Enable frame color indicator
+Enables frame color indicator for NVIDIA Frame Capture Analysis Tool (FCAT) system. FCAT is hardware/software complex for accurate frametime analysis.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

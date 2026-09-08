@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凝冰结魄 卡顿根因排查报告</title>
+<style>
+  :root{
+    --bg:#0e1117; --card:#161b22; --ink:#e6edf3; --muted:#8b97aa;
+    --accent:#7fd1ff; --green:#5be38b; --amber:#ffb454; --red:#ff6b6b;
+    --line:#2a313c;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    line-height:1.65;padding:28px;}
+  h1{font-size:22px;margin:0 0 4px;color:var(--accent);}
+  h2{font-size:16px;margin:26px 0 10px;color:var(--accent);
+    border-left:3px solid var(--accent);padding-left:10px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:16px 18px;margin:12px 0;}
+  .verdict{font-weight:700;}
+  .ok{color:var(--green);} .warn{color:var(--amber);} .bad{color:var(--red);}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:6px 0;}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{color:var(--muted);font-weight:600;background:#11161d;}
+  code{background:#0b0f14;color:#9fe0ff;padding:1px 6px;border-radius:4px;
+    font-family:"Cascadia Code",Consolas,monospace;font-size:12px;}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;
+    font-weight:700;}
+  .pill.ok{background:rgba(91,227,139,.15);color:var(--green);}
+  .pill.bad{background:rgba(255,107,107,.15);color:var(--red);}
+  .pill.warn{background:rgba(255,180,84,.15);color:var(--amber);}
+  ol li,ul li{margin:6px 0;}
+  .note{color:var(--muted);font-size:12.5px;}
+  .big{font-size:15px;}
+</style>
+</head>
+<body>
+<h1>凝冰结魄 · 卡顿根因排查报告</h1>
+<div class="sub">排查日期 2026-08-29 · 源码运行（launch.bat）· 症状：HUD 界面反应迟钝、开机即卡、关闭呼吸灯仍卡、空闲桌面也卡</div>
+
+<div class="card">
+  <div class="big"><b>结论（代码层）</b></div>
+  <p>对空闲稳态（不开游戏、关闭呼吸灯、仅 HUD 自身在桌面）逐路径静态审查后，
+  <span class="verdict ok">默认配置下代码路径是干净的</span>：没有持续重绘、没有 UI 线程阻塞的子进程、
+  后台负载极低（仅 1 个 1Hz 的 Get-Counter 宿主）。前两次“呼吸灯修复”针对的是真实存在但
+  <b>非主导</b>的开销，因此没解决你的卡顿。</p>
+  <p>你的卡顿只剩两类现实可能：<br>
+  <b>① 你手动开启了「GPU 浮动锁频」或「负载门控降压」</b> —— 二者都会每秒调用 <code>ryzenadj.exe</code>，
+  而你的机器 <b>Core Isolation（内核隔离/内存完整性）是开启的</b>，驱动加载被拦，ryzenadj 会失败甚至挂起/空转，
+  占满一个 CPU 核或持有全局单实例互斥，造成全系统/UI 卡顿。<br>
+  <b>② 你机器的运行时特有问题</b>（驱动/DPI/PowerShell 行为），需靠下面的取证工具确认。</p>
+</div>
+
+<h2>一、已逐项排除的嫌疑（含代码证据）</h2>
+<table>
+  <tr><th>嫌疑</th><th>判定</th><th>证据 / 说明</th></tr>
+  <tr>
+    <td>呼吸灯重绘</td>
+    <td><span class="pill ok">排除</span></td>
+    <td><code>breathing.py</code> 扫描定时器在 <code>set_enabled(False)</code> 时 <code>stop()</code>，仅发一次稳态值。你已关呼吸灯。</td>
+  </tr>
+  <tr>
+    <td>整窗重绘风暴<br>（setMask+DWM 每帧重合成）</td>
+    <td><span class="pill ok">排除</span></td>
+    <td>主窗 <code>_OverlayWindow</code> 真实显示态为<span class="ok">不透明</span>（<code>WA_TranslucentBackground=False</code>，app_window.py:694）+ setMask；
+    主窗 <code>self.update()</code> 仅出现在用户操作/焦点切换/呼吸处理中（空闲态不触发）。</td>
+  </tr>
+  <tr>
+    <td>辉光层持续重绘</td>
+    <td><span class="pill ok">排除</span></td>
+    <td><code>_GlowOverlay</code> 仅在辉光 key 变化时重绘；呼吸关闭后无变化 → 不重绘。</td>
+  </tr>
+  <tr>
+    <td>失焦蒙版持续重绘</td>
+    <td><span class="pill ok">排除</span></td>
+    <td><code>_FocusScrim</code> 在 alpha≈0 时 <code>setVisible(False)</code>；空闲且聚焦态不显示。</td>
+  </tr>
+  <tr>
+    <td>失焦暗化定时器常驻</td>
+    <td><span class="pill ok">排除</span></td>
+    <td><code>_dim_tick</code> 为固定 180ms 过渡，到终点即 <code>self._dim_timer.stop()</code>（app_window.py:1511），不会常驻 30fps。</td>
+  </tr>
+  <tr>
+    <td>手柄轮询 30fps 空转重绘</td>
+    <td><span class="pill ok">排除</span></td>
+    <td><code>_poll_gamepad_impl</code> 空闲（无按键、摇杆居中）时只做属性读取，直接 return，<b>不触发任何重绘/导航</b>（interaction.py:1733-1760）。</td>
+  </tr>
+  <tr>
+    <td>UI 线程同步子进程<br>（ryzenadj / wmic / Get-Counter）</td>
+    <td><span class="pill ok">排除</span></td>
+    <td>所有重活都在后台线程：面板 <code>heavy_refresh()</code> → <code>_RefreshWorker</code>(QThread)；
+    ryzenadj silent 走后台回收线程；指标采样走单个常驻 PowerShell 宿主 + 读线程；
+    <code>CoreSampler</code> 仅 SMT 视图打开时运行。</td>
+  </tr>
+  <tr>
+    <td>后台 CPU 抢占（采样风暴）</td>
+    <td><span class="pill ok">排除</span></td>
+    <td>空闲稳态后台负载 = 1 个 1Hz Get-Counter 宿主 + ctypes <code>GetProcessTimes</code>；无高频 spawn、无忙等。</td>
+  </tr>
+  <tr>
+    <td>代码回归（git）</td>
+    <td><span class="pill warn">无法查</span></td>
+    <td>该项目目录不是 git 仓库，无法用 <code>git diff</code> 比对近期改动。你用 launch.bat 跑的是实时源码。</td>
+  </tr>
+</table>
+
+<h2>二、最可能的真实原因：ryzenadj 在 Core Isolation 机器上挂起/空转</h2>
+<div class="card">
+  <p class="big"><span class="pill bad">高概率（若相关开关已开启）</span></p>
+  <p>你的历史诊断已确认：<b>Windows Core Isolation（内存完整性）开启，拦截了 ryzenadj 依赖的 WinRing0x64.sys 驱动加载</b>。
+  在此环境下 <code>ryzenadj.exe</code> 会失败退出，极端情况下<b>进程挂起不退出</b>（需 10s 超时 taskkill）或<b>空转占用一个核心</b>。</p>
+  <ul>
+    <li><b>GPU 浮动锁频（GPU auto-lock）</b>：独立 daemon 线程每 1.5s 跑一次决策，开启时调用 <code>ryzenadj --gfx-clk</code>。
+        默认 <code>gpu_float_enabled=False</code>（config.py:190），<b>除非你手动开过</b>。</li>
+    <li><b>负载门控降压（undervolt）</b>：<code>_uv_tick</code> 在 UI 线程每 1s 跑；状态机仅在“档位变化”时写 ryzenadj。
+        默认 <code>enabled=False</code>（undervolt.py:131），空闲无游戏→状态恒为“无游戏 CO=0”→不会写。</li>
+  </ul>
+  <p class="note">若二者任一开启，且 ryzenadj 在你的机器上挂起：要么占满一个核（全系统卡），要么长期持有
+  <code>_RYZENADJ_BUSY</code> 全局互斥，使其它 ryzenadj 调用被跳过/排队，表现为“HUD 反应迟钝、开机即卡、空闲也卡”。
+  这<b>完全符合你三次描述的症状</b>，且前两次修复都碰不到它（因为根本不是渲染问题）。</p>
+</div>
+
+<h2>三、立即 A/B 验证（无需取证工具，10 秒）</h2>
+<div class="card">
+  <ol>
+    <li>打开凝冰结魄，进「电源」卡片，看 <b>GPU 浮动锁频</b> 是不是 ON；进降压相关卡片，看 <b>负载门控降压</b> 是不是 ON。</li>
+    <li>把这两个开关都<b>关掉</b>（若开着）。</li>
+    <li>观察 30 秒：卡顿是否<b>立刻消失</b>？</li>
+  </ol>
+  <p>→ 若消失：<b>坐实是 ryzenadj 挂起</b>。根因是 Core Isolation 拦驱动，与代码无关；
+  后续我可加一道“检测到 Core Isolation 就直接禁用 ryzenadj 类功能并弹一次提示”的防护（低风险）。</p>
+  <p>→ 若仍卡：排除 ryzenadj 假设，进入第④步用取证工具拿真凭实据。</p>
+</div>
+
+<h2>四、确定性取证（profiler，已埋入代码，零开销待命）</h2>
+<div class="card">
+  <p>上一轮我已在热路径埋入一个<b>仅当环境变量开启才生效</b>的采样器
+  （<code>src/ningbingjue/core/profile.py</code>，正常跑零开销）：</p>
+  <ol>
+    <li>在掌机里用命令行运行：<br>
+        <code>set NBJ_PROFILE=1 &amp;&amp; launch.bat</code><br>
+        （或在 launch.bat 开头加 <code>set NBJ_PROFILE=1</code>）</li>
+    <li>复现卡顿约 30 秒（保持空闲桌面即可）。</li>
+    <li>把 <code>ningbingjue/logs/nbj_profile.log</code> 发我。</li>
+  </ol>
+  <p class="note">日志里关键指标：<br>
+  • <code>main_paint</code> / <code>glow_paint</code> &gt;100/s → 重绘风暴（我判断不太可能，但可一锤定音）；<br>
+  • <code>ui_gap_max</code> &gt;1300ms → UI 线程被阻塞（指向 ryzenadj/CPU 抢占）；<br>
+  • <code>sync_all_ms</code> / <code>refresh_ms</code> / <code>gp_poll</code> 各路径每耗费。</p>
+</div>
+
+<h2>五、后续修复方向（确认后再动代码）</h2>
+<ul>
+  <li>若 A/B 或 profiler 坐实 ryzenadj：在 <code>maybe_apply</code> / 功能启用处加 <code>hvci_enabled</code> 前置检查，
+      检测到 Core Isolation 就<b>不发起 ryzenadj</b>、弹一次明确提示并自动禁用相关开关（复用现有熔断逻辑）。</li>
+  <li>若 profiler 显示是渲染侧（main_paint 异常高）：再针对 setMask+DWM 在 1.5x DPR 的真实开销做定向优化。</li>
+</ul>
+
+<div class="sub" style="margin-top:24px;">说明：本报告基于源码静态审查 + 你的三项症状描述。未修改任何业务代码，仅埋入可选 profiler。遵循“先查根因、未确认不修改”的约定。</div>
+</body>
+</html>

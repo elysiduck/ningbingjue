@@ -1,0 +1,27 @@
+tests/test_restart.py::test_restart_frozen_gui_inserted_when_missing
+STATUS=FAILED
+        # 1) 先落盘，避免重启丢失正在编辑的布局。
+        try:
+            self._app.save_all()
+        except Exception:  # noqa: BLE001 - 退出阶段不应因保存失败阻断重启
+            pass
+        # 2) 组装新进程启动命令：复用当前 argv。
+        if getattr(sys, "frozen", False):
+            argv = [sys.executable, *sys.argv[1:]]
+        else:
+            # 开发模式：sys.executable 是 python，必须把 run.py 作为脚本参数补上。
+            argv = [sys.executable, *sys.argv]
+        # 3) 标记重启子进程，绕过单实例互斥（旧进程即将退出并释放互斥）。
+        env = os.environ.copy()
+        env["NINGBING_RESTART"] = "1"
+        # 4) 先拉起新进程（独立运行，不随当前进程退出而消亡）。
+        try:
+            proc = subprocess.Popen(argv, cwd=os.getcwd(), env=env, close_fds=True)
+        except Exception as exc:  # noqa: BLE001
+>           self._toast("重启失败：无法启动新进程（%s）" % exc, success=False)
+            ^^^^^^^^^^^
+E           AttributeError: 'types.SimpleNamespace' object has no attribute '_toast'
+src\ningbingjue\ui\edit_overlay.py:4595: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_restart.py::test_restart_frozen_gui_inserted_when_missing
+1 failed in 0.59s

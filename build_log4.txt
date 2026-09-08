@@ -1,0 +1,142 @@
+327 INFO: PyInstaller: 6.21.0, contrib hooks: 2026.6
+328 INFO: Python: 3.13.14
+373 INFO: Platform: Windows-11-10.0.26200-SP0
+373 INFO: Python environment: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\.build_venv
+374 INFO: wrote C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\NingBingJue.spec
+387 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue',
+ 'E:\\Program '
+ 'Files\\WorkBuddy\\resources\\app.asar.unpacked\\cli\\vendor\\shim',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\python313.zip',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\DLLs',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib\\site-packages',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue',
+ 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\src']
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+903 INFO: Appending 'datas' from .spec
+906 INFO: checking Analysis
+906 INFO: Building Analysis because Analysis-00.toc is non existent
+906 INFO: Looking for Python shared library...
+906 INFO: Using Python shared library: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\python313.dll
+906 INFO: Running Analysis Analysis-00.toc
+906 INFO: Target bytecode optimization level: 0
+906 INFO: Initializing module dependency graph...
+908 INFO: Initializing module graph hook caches...
+931 INFO: Analyzing modules for base_library.zip ...
+2373 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+2417 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+3311 INFO: Processing standard module hook 'hook-math.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+5892 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8167 INFO: Caching module dependency graph...
+8215 INFO: Analyzing C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\frozen_launcher.py
+8415 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8423 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+8686 INFO: Processing standard module hook 'hook-psutil.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+9231 INFO: Processing standard module hook 'hook-webbrowser.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+9471 INFO: Processing standard module hook 'hook-PyQt6.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+10391 INFO: Processing standard module hook 'hook-PyQt6.QtCore.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+15724 INFO: Processing standard module hook 'hook-PyQt6.QtGui.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+36010 INFO: Processing standard module hook 'hook-PyQt6.QtWidgets.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+41702 INFO: Processing standard module hook 'hook-pygame.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib\\site-packages\\pygame\\__pyinstaller'
+41907 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+41910 INFO: SetuptoolsInfo: initializing cached setuptools info...
+43152 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+43270 INFO: Analyzing hidden import 'PyQt6.QtSvg'
+43289 INFO: Processing standard module hook 'hook-PyQt6.QtSvg.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+43754 INFO: Analyzing hidden import 'PyQt6.QtSvgWidgets'
+43763 INFO: Processing standard module hook 'hook-PyQt6.QtSvgWidgets.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+44198 INFO: Processing module hooks (post-graph stage)...
+44266 INFO: Performing binary vs. data reclassification (159 entries)
+44419 INFO: Looking for ctypes DLLs
+44555 INFO: Analyzing run-time hooks ...
+44557 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+44561 INFO: Including run-time hook 'pyi_rth_pyqt6.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+44565 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+44569 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks'
+44575 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\.build_venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+44589 INFO: Creating base_library.zip...
+44618 INFO: Looking for dynamic libraries
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+44999 INFO: Extra DLL search directories (AddDllDirectory): ['C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib\\site-packages\\PyQt6\\Qt6\\bin', 'C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib\\site-packages\\pygame']
+44999 INFO: Extra DLL search directories (PATH): ['C:\\Users\\13567\\WorkBuddy\\2026-07-18-10-22-49\\ningbingjue\\runtime\\python\\Lib\\site-packages\\PyQt6\\Qt6\\bin']
+46728 INFO: Warnings written to C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build\NingBingJue\warn-NingBingJue.txt
+46755 INFO: Graph cross-reference written to C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build\NingBingJue\xref-NingBingJue.html
+46798 INFO: checking PYZ
+46798 INFO: Building PYZ because PYZ-00.toc is non existent
+46799 INFO: Building PYZ (ZlibArchive) C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build\NingBingJue\PYZ-00.pyz
+47164 INFO: Building PYZ (ZlibArchive) C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build\NingBingJue\PYZ-00.pyz completed successfully.
+47173 INFO: checking PKG
+47173 INFO: Building PKG because PKG-00.toc is non existent
+47173 INFO: Building PKG (CArchive) NingBingJue.pkg
+47197 INFO: Building PKG (CArchive) NingBingJue.pkg completed successfully.
+47198 INFO: Bootloader C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\.build_venv\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\runw.exe
+47198 INFO: checking EXE
+47199 INFO: Building EXE because EXE-00.toc is non existent
+47199 INFO: Building EXE from EXE-00.toc
+47199 INFO: Copying bootloader EXE to C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build\NingBingJue\NingBingJue.exe
+47206 INFO: Copying icon to EXE
+47214 INFO: Copying 0 resources to EXE
+47214 INFO: Embedding manifest in EXE
+47218 INFO: Appending PKG archive to EXE
+47221 INFO: Fixing EXE headers
+47301 INFO: Building EXE from EXE-00.toc completed successfully.
+47306 INFO: checking COLLECT
+47306 INFO: Building COLLECT because COLLECT-00.toc is non existent
+47307 INFO: Removing dir C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\dist\NingBingJue
+47489 INFO: Building COLLECT COLLECT-00.toc
+48088 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+48096 INFO: Build complete! The results are available in: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\dist
+[build] PyInstaller args:
+    frozen_launcher.py
+    --name
+    NingBingJue
+    --windowed
+    --uac-admin
+    --noconfirm
+    --distpath
+    C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\dist
+    --workpath
+    C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\build
+    --paths
+    .
+    --paths
+    src
+    --hidden-import
+    PyQt6.QtCore
+    --hidden-import
+    PyQt6.QtWidgets
+    --hidden-import
+    PyQt6.QtGui
+    --hidden-import
+    PyQt6.QtSvg
+    --hidden-import
+    PyQt6.QtSvgWidgets
+    --hidden-import
+    PyQt6.sip
+    --hidden-import
+    pygame
+    --hidden-import
+    psutil
+    --add-data
+    src/ningbingjue/blocks/ryzenadj-win64;blocks/ryzenadj-win64
+    --add-data
+    src/ningbingjue/blocks/RTSS;ningbingjue/blocks/RTSS
+    --add-data
+    layout.json;.
+    --add-data
+    config;config
+    --add-data
+    buttons;buttons
+    --add-data
+    src/ningbingjue/vendor/VirtualDesktop;ningbingjue/vendor/VirtualDesktop
+
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+
+[build] done -> dist/NingBingJue/

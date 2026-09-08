@@ -1,0 +1,8 @@
+LIBRARY xinput1_3
+EXPORTS
+    XInputGetState
+    XInputGetStateEx @100
+    XInputSetState
+    XInputGetCapabilities
+    XInputEnable
+    XInputGetDSoundAudioDeviceGuids

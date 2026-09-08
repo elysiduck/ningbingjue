@@ -1,0 +1,19 @@
+tests/test_tile.py::test_launch_records_calls
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________________________ test_launch_records_calls __________________________
+    def test_launch_records_calls():
+        cfg = AppConfig()
+        cfg.tiles = _tiles()
+        launcher, calls = _launcher()
+        block = TileBlock(cfg, launcher=launcher)
+        block.on_activate_item()
+        block.focus_idx.value = 0
+>       block.on_item_confirm()  # launch A.exe
+        ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'TileBlock' object has no attribute 'on_item_confirm'
+tests\test_tile.py:40: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_tile.py::test_launch_records_calls - AttributeError: 'TileB...
+1 failed in 0.27s

@@ -1,0 +1,27 @@
+tests/test_edit_overlay.py::test_gamepad_hint_badge_on_buttons
+STATUS=CRASH
+        # Before gamepad use: no hints shown.
+        ctrl.refresh()
+        for it in ctrl._items:
+            w = it.widget
+            if isinstance(w, HintButton) and it.hint:
+                assert w.show_gamepad_hint is False, f"{w.text()} hint shown before gp active"
+        # After gamepad activation: hints appear.
+        ctrl._gp_active = True
+        ctrl.refresh()
+        for it in ctrl._items:
+            w = it.widget
+            if isinstance(w, HintButton) and it.hint:
+>               assert w.show_gamepad_hint is True, f"{w.text()} hint missing"
+E               AssertionError: 新增磁贴 hint missing
+E               assert False is True
+E                +  where False = <ningbingjue.ui.gamepad_hint.HintButton object at 0x000002893CD3CC30>.show_gamepad_hint
+tests\test_edit_overlay.py:316: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 2 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_edit_overlay.py::test_gamepad_hint_badge_on_buttons - Asser...
+1 failed in 19.63s

@@ -1,0 +1,27 @@
+tests/test_edit_overlay.py::test_gamepad_moves_selected_tile
+STATUS=CRASH
+        ctrl._focus = -1
+        ctrl.refresh()
+        # find the grid NavItem and focus it
+        for i, it in enumerate(ctrl._items):
+            if it.widget is grid:
+                ctrl.set_focus(i)
+                break
+        ctrl._gamepad.state = GamepadState(connected=True, lx=0, ly=30000)
+        ctrl._poll_gamepad()
+>       assert grid.work[0].row == 1
+E       AssertionError: assert 0 == 1
+E        +  where 0 = Tile(launch_type='FILE', launch_path='C:/a', width=1, tile_name_color='255,255,255', icon_path='', row=0, name='A', height=1, block_name='', show_block_title=True, col=0, show_tile_name=True, border_color='', bg_color='').row
+tests\test_edit_overlay.py:207: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 2 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[hotkey] RegisterHotKey 失败: mods=0xa vk=0x77 err=1409
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_edit_overlay.py::test_gamepad_moves_selected_tile - Asserti...
+1 failed in 18.58s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-264238e7-98fd-4f93-9ba5-88d946559c1b", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-e3bdd555-448c-42b4-85ce-184040002695", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-1c77df99-fdfe-46f9-8424-9711a8581e31", "reason": "windows-sandbox-recycle-bin-unavailable"}

@@ -1,0 +1,27 @@
+tests/test_rtss_autolock.py::test_fallback_to_baseline_after_fall_ticks
+STATUS=FAILED
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-743/test_fallback_to_baseline_afte0')
+make_rtss_ui = <function make_rtss_ui.<locals>._make at 0x000002C19EC7B2E0>
+    def test_fallback_to_baseline_after_fall_ticks(tmp_path, make_rtss_ui):
+        block, cli = _auto_block(tmp_path, make_rtss_ui, 10.0, 10.0, initial_prog=10.0)
+        block.toggle_auto_lock()
+        for _ in range(3):
+            block.auto_lock_tick()  # 顶到上限
+        assert block.auto_active is True
+        # 离开低负载：GPU 负载拉到 95（>50）且不在地板 → 但 EMA(α=0.4) 需几拍才越过阈值
+        block.set_metrics(10.0, 95.0, 10.0)
+        block.auto_lock_tick()
+        assert block.auto_active is True  # 1 fall tick：EMA 仅 ~44% <50%，尚不回落
+        block.auto_lock_tick()
+        assert block.auto_active is True  # 2 fall tick：EMA ~64% >50%，差一拍
+        block.auto_lock_tick()
+>       assert block.auto_active is False  # 3 fall tick：稳定回落到基线
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       assert True is False
+E        +  where True = <ningbingjue.blocks.rtss.RtssBlock object at 0x000002C19EBE5FD0>.auto_active
+tests\test_rtss_autolock.py:107: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_rtss_autolock.py::test_fallback_to_baseline_after_fall_ticks
+1 failed in 0.49s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-55709547-4058-4929-afa5-57c5100a99db", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-4641643c-1652-4fb8-80aa-a4040e8f7f21", "reason": "windows-sandbox-recycle-bin-unavailable"}

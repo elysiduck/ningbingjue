@@ -1,0 +1,27 @@
+tests/test_power.py::test_gpu_float_warns_on_counter_corruption
+STATUS=CRASH
+        lbl = _with_toast_label(b)
+        # 让 _read_gpu_util 返回「信号不可用」，从而进入 unknown 分支去跑损坏检测。
+        b._read_gpu_util = lambda snap=None: (0.0, False)  # type: ignore[assignment]
+        sampler = MetricSampler.instance()
+        try:
+            sampler._running = True
+            sampler._state["ok"] = True
+            sampler._state["ts"] = time.monotonic()
+            sampler._state["gpu"] = None  # GPU 永远读不到
+            sampler._state["cores"] = {f"cpu{i}": 5.0 for i in range(4)}  # 核心健康
+            # ① 损坏刚出现（<20s），即便 tick 多次也不应弹 toast
+            b.gpu_float_tick()
+            assert "lodctr" not in lbl.text.lower(), "损坏未满 20s 不应弹窗"
+            # ② 用户主动点开开关 => force 立即弹一次
+            b._maybe_warn_gpu_counter_corrupted(force=True)
+>           assert "lodctr" in lbl.text.lower(), "force 路径必须立即弹 lodctr 引导"
+E           AssertionError: force 路径必须立即弹 lodctr 引导
+E           assert 'lodctr' in ''
+E            +  where '' = <built-in method lower of str object at 0x00007FFAC49F76C0>()
+E            +    where <built-in method lower of str object at 0x00007FFAC49F76C0> = ''.lower
+E            +      where '' = <test_power._FakeLabel object at 0x000002857D61AE40>.text
+tests\test_power.py:588: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_power.py::test_gpu_float_warns_on_counter_corruption - Asse...
+1 failed in 0.44s

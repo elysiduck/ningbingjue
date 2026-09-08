@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\runtime\python\python.exe
+rootdir: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue
+configfile: pyproject.toml
+collecting ... collected 47 items / 44 deselected / 3 selected
+
+tests/test_button_edit.py::test_l2_commit_and_apply_restyles_buttons PASSED [ 33%]
+tests/test_button_edit.py::test_clone_click_selects_key PASSED           [ 66%]
+tests/test_button_edit.py::test_apply_and_refresh_restyles_unbound_selected_button PASSED [100%][safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-d24c45ef-ede7-431c-9ee0-cf56d6f97fcb", "reason": "windows-sandbox-recycle-bin-unavailable"}
+
+
+====================== 3 passed, 44 deselected in 33.26s ======================
+RC=0

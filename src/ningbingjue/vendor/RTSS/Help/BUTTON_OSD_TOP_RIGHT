@@ -1,0 +1,6 @@
+On-Screen Display origin : top right
+Moves On-Screen Display origin to the top right corner. Click selected button one more time to reset On-Screen display coordinates and return On-Screen Display position to the origin.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

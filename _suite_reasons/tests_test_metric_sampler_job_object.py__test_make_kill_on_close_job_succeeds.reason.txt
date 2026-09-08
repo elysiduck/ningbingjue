@@ -1,0 +1,13 @@
+tests/test_metric_sampler_job_object.py::test_make_kill_on_close_job_succeeds
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________________ test_make_kill_on_close_job_succeeds _____________________
+    def test_make_kill_on_close_job_succeeds():
+        """_make_kill_on_close_job() 在 Windows 应成功创建 Job Object。"""
+>       from ningbingjue.core.metrics import _make_kill_on_close_job, _CloseHandle
+E       ImportError: cannot import name '_make_kill_on_close_job' from 'ningbingjue.core.metrics' (C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\src\ningbingjue\core\metrics.py)
+tests\test_metric_sampler_job_object.py:35: ImportError
+=========================== short test summary info ===========================
+FAILED tests/test_metric_sampler_job_object.py::test_make_kill_on_close_job_succeeds
+1 failed in 0.35s

@@ -1,0 +1,7 @@
+Application detection level : medium
+Selects medium detection level for the application associated with the current profile. In this mode %PRODUCTNAME% intercepts application's calls to DirectDraw, Direct3D and OpenGL runtime libraries. 
+This mode is recommended for collecting runtime statistics, such as framerate, and enabling additional services, such as On-Screen Display, in the majority of modern 3D applications as well as in the applications using outdated 2D/3D hardware acceleration interfaces like DirectDraw and Direct3D7.
+
+Hints:
+- Some protected applications may treat executable code hooking required for proper application detection, statistics collection and On-Screen Display rendering as possible threat and refuse to run. To troubleshoot such issues try to add a profile for such application and decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

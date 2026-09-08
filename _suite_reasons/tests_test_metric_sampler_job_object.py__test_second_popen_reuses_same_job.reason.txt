@@ -1,0 +1,13 @@
+tests/test_metric_sampler_job_object.py::test_second_popen_reuses_same_job
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+______________________ test_second_popen_reuses_same_job ______________________
+    def test_second_popen_reuses_same_job():
+        """已有 Job 时，第二个子进程挂同一个 Job，不重复创建。"""
+>       from ningbingjue.core.metrics import _make_kill_on_close_job, _CloseHandle
+E       ImportError: cannot import name '_make_kill_on_close_job' from 'ningbingjue.core.metrics' (C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\src\ningbingjue\core\metrics.py)
+tests\test_metric_sampler_job_object.py:106: ImportError
+=========================== short test summary info ===========================
+FAILED tests/test_metric_sampler_job_object.py::test_second_popen_reuses_same_job
+1 failed in 0.30s

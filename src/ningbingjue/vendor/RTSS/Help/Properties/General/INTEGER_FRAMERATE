@@ -1,0 +1,5 @@
+Display integer framerate
+Allows displaying framerate either as integer value or as floating point value with 0.1 FPS precision.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

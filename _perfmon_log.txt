@@ -1,0 +1,7 @@
+start
+imported Application
+created app
+booted
+registry perfmon: True
+blocks perfmon: True
+cards tail: ['tile', 'tile', 'perfmon']

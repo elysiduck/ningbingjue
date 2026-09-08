@@ -1,0 +1,7 @@
+# 凝冰结魄 (NingBingJiePo) — Python port dependencies
+# GUI / runtime (Windows host only):
+PyQt6>=6.4
+# 手柄 SDL2 后端（src/ningbingjue/ui/gamepad.py 惰性 import；缺则降级为键盘模式）
+pygame>=2.5
+# 电池信息（src/ningbingjue/platform/battery.py 惰性 import；缺则回退 ctypes.windll）
+psutil>=5.9

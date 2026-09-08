@@ -1,0 +1,3 @@
+tests/test_app_window_gui.py::test_default_accent_paints_without_error
+STATUS=CRASH
+

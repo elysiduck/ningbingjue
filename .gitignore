@@ -1,0 +1,47 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest_tmp/
+.venv/
+.build_venv/
+.idea/
+
+# ---- 运行时 / 构建产物（体积大、可重建）----
+runtime/
+build/
+dist/
+NingBingJue_portable/
+test_install/
+logs/
+*.log
+launch.err
+*.lnk
+
+# ---- 内嵌 HWiNFO 二进制（打包时由 --bundle-hwinfo 从官方便携包提取，不入库）----
+src/ningbingjue/vendor/HWiNFO/HWiNFO64.exe
+src/ningbingjue/vendor/HWiNFO/HWiNFO64.INI
+
+# ---- 内嵌 RTSS 二进制（裁剪版由 extract_rtss_bundle.py 产出到 vendor/RTSS，不入库）----
+src/ningbingjue/vendor/RTSS/RTSS.exe
+src/ningbingjue/vendor/RTSS/RTSSHooks64.dll
+src/ningbingjue/vendor/RTSS/RTSSHooks.dll
+src/ningbingjue/vendor/RTSS/RTSSHooksLoader64.exe
+src/ningbingjue/vendor/RTSS/RTSSHooksLoader.exe
+src/ningbingjue/vendor/RTSS/RTUI.dll
+src/ningbingjue/vendor/RTSS/RTMUI.dll
+src/ningbingjue/vendor/RTSS/RTFC.dll
+src/ningbingjue/vendor/RTSS/RTSS.dat
+
+# ---- 本机运行时配置（可再生成；真相源在 D:\备份）----
+layout.json
+rtss_config.json
+sync_config.json
+nul
+frozen_pids.txt
+
+# ---- WorkBuddy 会话数据 ----
+.workbuddy/
+
+# ---- 运行时状态（程序运行期写入，体积随用增长）----
+frozen_groups.json

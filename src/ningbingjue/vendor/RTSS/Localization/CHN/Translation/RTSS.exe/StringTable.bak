@@ -1,0 +1,146 @@
+#src %s skin has been successfully compiled!
+#dst %s 的皮肤已经成功编译了！
+#end
+#src Failed to compile %s skin!
+#dst 无法编译 %s 的皮肤!
+#end
+#src %s skin has been successfully decompiled!
+#dst %s 皮肤已经成功的反编译了！
+#end
+#src Failed to decompile %s skin!
+#dst 无法反编译 %s 的皮肤!
+#end
+#src Failed to load %s skin!
+#dst 加载 %s 皮肤失败!
+#end
+#src Some of %PRODUCTNAME% components are expired, missing or corrupted!
+#dst %PRODUCTNAME% 部分组件已过期，丢失或损坏!
+#end
+#src Failed to load %s skin, reverting to default skin!
+#dst 加载 %s 皮肤失败，恢复为默认皮肤！
+#end
+#src Unsupported %s skin file format!
+#dst 不支持的 %s 皮肤文件格式！
+#end
+#src Failed to initialize main window with %s skin, reverting to default skin!
+#dst 无法使用 %s 皮肤初始化主窗口，恢复为默认皮肤！
+#end
+#src Failed to initialize main window!
+#dst 无法初始化主窗口！
+#end
+#src Beta %d
+#dst Beta %d
+#end
+#src compiled on %d-%m-%Y %H:%M:%S
+#dst 编译于 %d-%m-%Y %H:%M:%S
+#end
+#src expires on %s
+#dst 于 %s 到期
+#end
+#src Cannot load RTSSHooks.dll library!
+#dst 无法加载 RTSSHooks.dll 库！
+#end
+#src Tip: %PRODUCTNAME% is currently minimized to system tray area. You may click its' tray icon to bring %PRODUCTNAME% window to top.
+#dst %PRODUCTNAME% 目前被最小化到系统托盘区域。您可以点击其“托盘图标”重新唤出 %PRODUCTNAME% 窗口。
+#end
+#src Failed to restore main window DIB cache!
+#dst 无法恢复主窗口DIB缓存！
+#end
+#src CTaskSchedulerInterface::%s failed with error code %d!
+#dst CTaskSchedulerInterface::%s 失败，错误代码 %d
+#end
+#src %PRODUCTNAME% properties
+#dst %PRODUCTNAME% 属性
+#end
+#src Resource file copy has been successfully saved to %s!
+#dst 资源文件副本已成功保存到 %s!
+#end
+#src Failed to save resource file copy to %s!
+#dst 无法将资源文件副本保存到 %s !
+#end
+#src Executable files (*.exe)|*.exe||
+#dst 可执行文件(*.exe)|*.exe||
+#end
+#src Bitmap files (*.bmp)|*.bmp||
+#dst 位图文件 (*.bmp)|*.bmp||
+#end
+#src There is no new version available at this time. Currently installed version is up to date.
+#dst 目前没有新版本可用。目前安装的版本是最新的。
+#end
+#src %PRODUCTNAME% v%s is available for download. Do you want to open the download page now?
+#dst %PRODUCTNAME% v%s 可供下载。您要立即打开下载页面吗？
+#end
+#src Cannot retrieve update information from the update server!
+#dst 无法从更新服务器获取更新信息！
+#end
+#src Cannot establish connection with the update server!
+#dst 无法与更新服务器建立连接！
+#end
+#src cannot open internet connection
+#dst 无法打开互联网连接
+#end
+#src cannot open server connection
+#dst 无法打开与服务器的连接
+#src cannot open HTTP request
+#dst 无法创建HTTP请求
+#end
+#src cannot send HTTP request
+#dst 无法发送HTTP请求
+#end
+#src cannot query HTTP info
+#dst 无法查询HTTP信息
+#end
+#src proxy authentification required
+#dst 代理需要身份验证
+
+#end
+#src cannot read file
+#dst 无法读取文件
+#end
+#src unknown reason %d
+#dst 未知原因 %d
+#end
+#src Reason : %s, error code %d
+#dst 原因: %s, 错误代码 %d
+#end
+#src Last checked on %A, %B %d, %Y, %H:%M:%S
+#dst 上次检查于 %A, %B %d, %Y, %H:%M:%S
+#end
+#src Reboot is required to finalize %PRODUCTNAME% installation!
+#dst 需要重新启动才能完成 %PRODUCTNAME% 的安装!
+#end
+#src Some system components cannot be hooked right now. It is strongly recommended to restart application.
+#dst 某些系统组件现在无法挂钩钩取。强烈建议重新启动应用程序。
+#end
+#src The changes you've made will be applied after restarting %PRODUCTNAME%.  Do you want to restart it now?
+#dst 重新启动 %PRODUCTNAME% 后，您所做的更改将被应用。您想现在重启吗？
+#end 
+#src Skin scaling %d%%
+#dst 皮肤缩放 %d%%
+#end
+#src On-Screen Display preview
+#dst OSD 预览
+
+#end
+#src Image files (*.bmp;*.png)|*.bmp;*.png||
+#dst 图像文件(*.bmp;*.png)|*.bmp;*.png||
+#end
+#src Opacity %d%%
+#dst 不透明度 %d%%
+#end
+#src Please enter integer value in %d-%d range!
+#dst 请输入 %d-%d  范围内的整数值！
+#end
+#src Active 3D application
+#dst 活动的3D应用程序
+#end
+#src Properties
+#dst 属性
+#end
+#src Add profile
+#dst 添加个人配置
+
+#end
+#src Add exclusion
+#dst 添加排除
+#end

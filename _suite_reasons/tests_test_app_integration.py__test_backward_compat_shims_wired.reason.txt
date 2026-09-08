@@ -1,0 +1,27 @@
+tests/test_app_integration.py::test_backward_compat_shims_wired
+STATUS=CRASH
+        app, _ = _boot_with_all_cards()
+        expected = {
+            "Set-RTSSLock", "Toggle-Lock", "Apply-Lock",
+            "Load-RTSSConfig", "Save-RTSSConfig",
+            "Refresh-ProcMonPanel", "Toggle-ProcMonScript",
+            "Save-ProcMonConfig", "Load-ProcMonConfig",
+            "Refresh-FreezePanel",
+            "Refresh-LSPanel", "Load-LSPreset",
+            "Update-PowerStatus", "Apply-PowerSettings",
+            "Save-PowerConfig", "Load-PowerConfig",
+            "Toggle-PowerLock", "Toggle-GpuLock", "Toggle-GpuFloat",
+            "Layout-TilePanel", "Save-TileConfigs", "Load-TileConfigs",
+            "Invoke-TileLaunch", "Handle-FreezeHotkey", "Handle-FreezeEnter",
+        }
+        for name in expected:
+>           assert name in app.shims, f"missing shim {name}"
+E           AssertionError: missing shim Handle-FreezeEnter
+E           assert 'Handle-FreezeEnter' in {'Set-RTSSLock': <bound method RtssBlock.set_lock of <ningbingjue.blocks.rtss.RtssBlock object at 0x0000020C6723B770>>...ly-Lock': <bound method RtssBlock.apply_lock of <ningbingjue.blocks.rtss.RtssBlock object at 0x0000020C6723B770>>, ...}
+E            +  where {'Set-RTSSLock': <bound method RtssBlock.set_lock of <ningbingjue.blocks.rtss.RtssBlock object at 0x0000020C6723B770>>...ly-Lock': <bound method RtssBlock.apply_lock of <ningbingjue.blocks.rtss.RtssBlock object at 0x0000020C6723B770>>, ...} = <ningbingjue.app.Application object at 0x0000020C66CCE3C0>.shims
+tests\test_app_integration.py:61: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+=========================== short test summary info ===========================
+FAILED tests/test_app_integration.py::test_backward_compat_shims_wired - Asse...
+1 failed in 8.78s

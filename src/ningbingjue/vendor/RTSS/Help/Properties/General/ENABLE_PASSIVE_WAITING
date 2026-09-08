@@ -1,0 +1,6 @@
+Enable passive waiting 
+Framerate limiter module can wait for target frametime using either passive (waitable timer based) or active (busy waiting loop based) mode. Passive waiting reduces CPU power consumption, but waitable timer precision on some systems can be non-ideal for perfect framepacing. As a result of passive waiting, CPU may also enter idle state with lower clock frequencies, and constant switching between idle and performance modes may also negatively affect framepacing precision and cause microstuttering. Active waiting mode maximizes CPU load on CPU core running render thread and this way preventing it from entering unwanted idle state while gaming. The only disadvantage of this mode is slightly higher CPU power consumption, this mode's framepacing precision is unbeatable. So select passive mode if your preference is CPU power consumption. Select active mode if your preference is maximum precision of framepacing.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

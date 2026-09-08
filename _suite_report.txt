@@ -1,0 +1,181 @@
+SUITE BASELINE REPORT
+============================================================
+totals: FAILED=53, PASSED=493
+
+
+[tests/test_app_integration.py] total=5 fail/err/crash=2
+  FAILED  tests/test_app_integration.py::test_backward_compat_shims_wired
+  FAILED  tests/test_app_integration.py::test_procmon_toggle_via_shim
+
+[tests/test_app_window_gui.py] no tests collected (script/helper or collect error)
+
+[tests/test_breathing.py] total=7 fail/err/crash=2
+  FAILED  tests/test_breathing.py::test_default_controller_reproduces_original_curve
+  FAILED  tests/test_breathing.py::test_set_period_changes_step
+
+[tests/test_breathing_gui.py] total=2 fail/err/crash=0
+
+[tests/test_btnlist_clone_width.py] total=1 fail/err/crash=0
+
+[tests/test_button_edit.py] total=22 fail/err/crash=2
+  FAILED  tests/test_button_edit.py::test_preview_items_wrap_clone_with_focus_frame
+  FAILED  tests/test_button_edit.py::test_selection_shows_focus_frame_not_rectangle
+
+[tests/test_button_editor_all_pages.py] no tests collected (script/helper or collect error)
+
+[tests/test_button_editor_pagenav_widths.py] total=1 fail/err/crash=0
+
+[tests/test_color.py] total=9 fail/err/crash=0
+
+[tests/test_config.py] total=3 fail/err/crash=0
+
+[tests/test_ec_io_locate.py] total=3 fail/err/crash=0
+
+[tests/test_edit_nav_dispatch.py] total=15 fail/err/crash=0
+
+[tests/test_edit_overlay.py] total=11 fail/err/crash=4
+  FAILED  tests/test_edit_overlay.py::test_gamepad_face_buttons_emit
+  FAILED  tests/test_edit_overlay.py::test_gamepad_hint_badge_on_buttons
+  FAILED  tests/test_edit_overlay.py::test_gamepad_moves_selected_tile
+  FAILED  tests/test_edit_overlay.py::test_gamepad_stick_navigates
+
+[tests/test_fan_auto_route.py] total=5 fail/err/crash=0
+
+[tests/test_fan_block_smoke.py] total=6 fail/err/crash=0
+
+[tests/test_fan_detect_device.py] total=10 fail/err/crash=0
+
+[tests/test_fan_detect_persist.py] total=1 fail/err/crash=0
+
+[tests/test_fan_hysteresis.py] total=1 fail/err/crash=0
+
+[tests/test_focus_color_hex_safety.py] total=44 fail/err/crash=0
+
+[tests/test_focus_opacity_zero.py] total=14 fail/err/crash=0
+
+[tests/test_freeze.py] total=37 fail/err/crash=0
+
+[tests/test_freeze_vdesktop.py] total=29 fail/err/crash=0
+
+[tests/test_gamepad_resume.py] total=5 fail/err/crash=0
+
+[tests/test_hwinfo_smi.py] total=9 fail/err/crash=0
+
+[tests/test_interaction.py] total=14 fail/err/crash=7
+  FAILED  tests/test_interaction.py::test_arrow_navigation_moves_focus
+  FAILED  tests/test_interaction.py::test_enter_activates_focused_item
+  FAILED  tests/test_interaction.py::test_esc_clears_focus
+  FAILED  tests/test_interaction.py::test_page_jump_moves_between_panels
+  FAILED  tests/test_interaction.py::test_refresh_does_not_fire_on_focus
+  FAILED  tests/test_interaction.py::test_slider_arrow_nudges_value
+  FAILED  tests/test_interaction.py::test_tab_steps_through_all_items
+
+[tests/test_layout_pagination.py] total=14 fail/err/crash=0
+
+[tests/test_ls.py] total=11 fail/err/crash=0
+
+[tests/test_metric_sampler_job_object.py] total=8 fail/err/crash=6
+  FAILED  tests/test_metric_sampler_job_object.py::test_attach_gives_up_on_assign_failure
+  FAILED  tests/test_metric_sampler_job_object.py::test_attach_gives_up_on_no_handle
+  FAILED  tests/test_metric_sampler_job_object.py::test_make_job_none_disables_attach
+  FAILED  tests/test_metric_sampler_job_object.py::test_make_kill_on_close_job_succeeds
+  FAILED  tests/test_metric_sampler_job_object.py::test_second_popen_reuses_same_job
+  FAILED  tests/test_metric_sampler_job_object.py::test_stop_closes_job_handle
+
+[tests/test_nav_skip_tile.py] total=1 fail/err/crash=0
+
+[tests/test_navigation.py] total=6 fail/err/crash=1
+  FAILED  tests/test_navigation.py::test_navigation_controller_page_wrap
+
+[tests/test_own_popup_focus.py] total=1 fail/err/crash=0
+
+[tests/test_page_switch_survival.py] total=1 fail/err/crash=0
+
+[tests/test_pagination_pure.py] total=15 fail/err/crash=0
+
+[tests/test_panels.py] total=3 fail/err/crash=0
+
+[tests/test_perfmon_panel_width.py] total=8 fail/err/crash=1
+  FAILED  tests/test_perfmon_panel_width.py::test_perfmon_value_labels_single_line
+
+[tests/test_platform.py] total=12 fail/err/crash=0
+
+[tests/test_popup_quit_on_close.py] no tests collected (script/helper or collect error)
+
+[tests/test_port_fixes.py] total=6 fail/err/crash=0
+
+[tests/test_power.py] total=29 fail/err/crash=1
+  FAILED  tests/test_power.py::test_gpu_float_warns_on_counter_corruption
+
+[tests/test_power_panel_debounce.py] total=13 fail/err/crash=0
+
+[tests/test_power_resume_reapply.py] total=19 fail/err/crash=0
+
+[tests/test_process_manager_wmic.py] total=4 fail/err/crash=0
+
+[tests/test_procmon.py] total=7 fail/err/crash=2
+  FAILED  tests/test_procmon.py::test_item_confirm_toggles_focused
+  FAILED  tests/test_procmon.py::test_navigation_cycles_focus
+
+[tests/test_procmon_ahk.py] total=11 fail/err/crash=0
+
+[tests/test_procmon_edit_fix.py] total=8 fail/err/crash=0
+
+[tests/test_procmon_enum_decode.py] total=4 fail/err/crash=0
+
+[tests/test_real_adapters.py] total=3 fail/err/crash=0
+
+[tests/test_render_pages.py] total=6 fail/err/crash=0
+
+[tests/test_restart.py] total=5 fail/err/crash=5
+  FAILED  tests/test_restart.py::test_restart_frozen_gui_inserted_when_missing
+  FAILED  tests/test_restart.py::test_restart_frozen_gui_present
+  FAILED  tests/test_restart.py::test_restart_nonfrozen_forces_gui
+  FAILED  tests/test_restart.py::test_restart_persists_and_hides_editor
+  FAILED  tests/test_restart.py::test_restart_popen_failure_falls_back_to_execl
+
+[tests/test_rtss.py] total=7 fail/err/crash=2
+  FAILED  tests/test_rtss.py::test_navigation_confirm_toggles_on_lock_button
+  FAILED  tests/test_rtss.py::test_navigation_slider_adjust_changes_fps
+
+[tests/test_rtss_autolock.py] total=26 fail/err/crash=1
+  FAILED  tests/test_rtss_autolock.py::test_fallback_to_baseline_after_fall_ticks
+
+[tests/test_rtss_smi.py] total=6 fail/err/crash=0
+
+[tests/test_skin.py] total=5 fail/err/crash=3
+  FAILED  tests/test_skin.py::test_ls_nav_items_carry_gamepad_hints
+  FAILED  tests/test_skin.py::test_main_action_hints
+  FAILED  tests/test_skin.py::test_overlay_offscreen_builds_and_paints
+
+[tests/test_slider_apply_method.py] total=8 fail/err/crash=5
+  FAILED  tests/test_slider_apply_method.py::test_fan_keyboard_nudge_does_not_arm_timer
+  FAILED  tests/test_slider_apply_method.py::test_fan_keyboard_nudge_then_confirm_applies
+  FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_debounce_applies
+  FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_no_apply_in_auto_mode
+  FAILED  tests/test_slider_apply_method.py::test_fan_mouse_drag_no_apply_when_not_applied
+
+[tests/test_smt_lock_force.py] total=3 fail/err/crash=0
+
+[tests/test_themes.py] total=5 fail/err/crash=1
+  FAILED  tests/test_themes.py::test_apply_theme_sets_state_and_freeze_highlight
+
+[tests/test_tile.py] total=5 fail/err/crash=2
+  FAILED  tests/test_tile.py::test_launch_records_calls
+  FAILED  tests/test_tile.py::test_navigation_matrix
+
+[tests/test_tile_report_optimizations.py] total=7 fail/err/crash=4
+  FAILED  tests/test_tile_report_optimizations.py::test_delete_extra_block_removes_it
+  FAILED  tests/test_tile_report_optimizations.py::test_edit_extra_block_syncs_hud_and_config
+  FAILED  tests/test_tile_report_optimizations.py::test_edit_items_opens_extra_block_editor
+  FAILED  tests/test_tile_report_optimizations.py::test_extra_tile_block_persists_round_trip
+
+[tests/test_tile_ui.py] total=6 fail/err/crash=2
+  FAILED  tests/test_tile_ui.py::test_tile_block_name_and_color_apply_to_hud
+  FAILED  tests/test_tile_ui.py::test_tile_panel_2d_matrix_and_icon
+
+[tests/test_timers.py] total=2 fail/err/crash=0
+
+[tests/test_ui.py] total=2 fail/err/crash=0
+
+[tests/test_undervolt.py] total=15 fail/err/crash=0

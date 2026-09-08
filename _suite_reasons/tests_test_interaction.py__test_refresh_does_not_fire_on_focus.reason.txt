@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_refresh_does_not_fire_on_focus
+STATUS=CRASH
+                        on_focus=lambda f: (
+                            calls.__setitem__("focus_true", calls["focus_true"] + 1)
+                            if f else
+                            calls.__setitem__("focus_false", calls["focus_false"] + 1)
+                        ),
+                    ))
+                return items
+        ctrl.register_panel(MockPanel(2))
+        ctrl.refresh()
+        ctrl.set_focus(0)
+        assert calls["focus_true"] == 1
+        calls["focus_false"] = 0
+        calls["focus_true"] = 0
+        # The per-second content refresh must not disturb focus / on_focus.
+        ctrl.refresh()
+        assert calls["focus_false"] == 0
+        assert calls["focus_true"] == 0
+>       assert ctrl._focus == 0  # focus preserved by widget identity
+        ^^^^^^^^^^^^^^^^^^^^^^^
+E       assert -1 == 0
+E        +  where -1 = <ningbingjue.ui.interaction.InteractionController object at 0x000002C6948CC050>._focus
+tests\test_interaction.py:203: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_refresh_does_not_fire_on_focus - asser...
+1 failed in 0.34s

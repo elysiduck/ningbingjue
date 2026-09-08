@@ -1,0 +1,49 @@
+[MAP]
+
+; Properties \ General tab
+
+ID_1019 = Properties\General\START_MINIMIZED
+ID_1129 = Properties\General\UPDATE_CHECKING_PERIOD
+ID_1130 = Properties\General\UPDATE_CHECKING_ALLOW_BETAS
+ID_1128 = Properties\General\UPDATE_STATUS
+ID_1127 = Properties\General\CHECK_NOW
+ID_1125 = Properties\General\ENABLE_FRAME_COLOR_INDICATOR
+ID_1126 = Properties\General\FRAME_COLOR_BARS_NUM
+ID_1132	= Properties\General\ENABLE_ENCODER_SERVER
+ID_1133	= Properties\General\ENCODER_SERVER_TYPE
+ID_1134	= Properties\General\ENABLE_64_BIT
+ID_1139 = Properties\General\HIDE_PRECREATED_PROFILES
+ID_1140 = Properties\General\INJECTION_DELAY
+ID_1141 = Properties\General\INJECTION_DELAY
+ID_1142 = Properties\General\RESET_CACHE
+ID_1151 = Properties\General\FRAMERATE_AVERAGING_INTERVAL
+ID_1152 = Properties\General\FRAMERATE_AVERAGING_INTERVAL
+ID_1153 = Properties\General\REFRESH_PERIOD
+ID_1154 = Properties\General\REFRESH_PERIOD
+ID_1155 = Properties\General\INTEGER_FRAMERATE
+ID_1156 = Properties\General\MAXIMUM_FRAMETIME
+ID_1157 = Properties\General\ENABLE_FRAMETIME_HISTORY
+ID_1158 = Properties\General\FRAMETIME_HISTORY_STYLE
+ID_1159 = Properties\General\FRAMETIME_HISTORY_SIZE
+ID_1160 = Properties\General\FRAMETIME_HISTORY_SIZE
+ID_1162 = Properties\General\BENCHMARK_MODE
+ID_1161 = Properties\General\PEAK_FRAMERATE_CALC
+ID_1168 = Properties\General\FRAMERATE_LIMITER
+ID_1164 = Properties\General\PERCENTILE_CALC
+ID_1165 = Properties\General\SYNC_LIMITER
+ID_1166 = Properties\General\FRAMETIME_CALC
+ID_1170 = Properties\General\ENABLE_PASSIVE_WAITING
+ID_1171 = Properties\General\PERCENTILE_BUFFER
+ID_1172 = Properties\General\USE_DETOURS
+ID_1173 = Properties\General\REFLEX_SET_LATENCY_MARKER
+ID_1174 = Properties\General\REFLEX_SLEEP
+
+; Properties \ User interface tab
+
+ID_1038 = Properties\User interface\LANGUAGE_COMBO
+ID_1011 = Properties\User interface\SHOW_TOOLTIPS
+ID_1109 = Properties\User interface\SKIN_PREVIEW
+ID_1023 = Properties\User interface\SKINS_COMBO
+ID_1135 = Properties\User interface\LAYERED_WINDOW_MODE
+ID_1136 = Properties\User interface\LAYERED_WINDOW_ALPHA
+ID_1138 = Properties\User interface\SCALE_FACTOR

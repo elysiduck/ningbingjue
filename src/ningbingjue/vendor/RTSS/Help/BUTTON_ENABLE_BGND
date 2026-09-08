@@ -1,0 +1,7 @@
+Enable On-Screen Display shadow
+Enables On-Screen Display shadow rendering. Shadow rendering can improve On-Screen Display readability in some applications by preventing the text from merging with solid screen color. 
+Please take a note that shadow rendering increases performance hit caused by On-Screen Display rendering in vector modes, so enable it only when necessary.
+
+Hints:
+- Anticheat systems of some games may treat game code hooking required for application detection and On-Screen Display rendering as possible cheat and block connection to multiplayer server. To troubleshoot such issues try to add a profile for such game and disable On-Screen Display support, or if it doesn't help, try to decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

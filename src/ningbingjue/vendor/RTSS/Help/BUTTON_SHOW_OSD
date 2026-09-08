@@ -1,0 +1,5 @@
+Show On-Screen Display
+Globally contorls On-Screen Display visibility. Use this option to hide On-Screen Display without changing the profiles. The client applications can also distantly control this option via hotkeys.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

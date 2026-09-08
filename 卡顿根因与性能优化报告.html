@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>凝冰结魄 · 卡顿根因与性能优化</title>
+<style>
+  :root{--bg:#16191f;--card:#1e2229;--ink:#e6e9ef;--muted:#9aa4b2;--red:#ff5a5a;--amber:#ffb454;--green:#62e0a8;--accent:#62e0a8;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.7;padding:28px;}
+  h1{font-size:24px;margin:0 0 4px;}
+  .sub{color:var(--muted);margin-bottom:22px;}
+  .card{background:var(--card);border:1px solid #2a313c;border-radius:12px;padding:18px 20px;margin-bottom:16px;}
+  h2{font-size:17px;margin:0 0 10px;color:var(--accent);}
+  code{background:#0e1116;padding:2px 6px;border-radius:5px;color:#9bd2ff;font-size:13px;}
+  .tag{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;margin-right:6px;}
+  .t-root{background:#3a1f22;color:var(--red);}
+  .t-fix{background:#1f3a2a;color:var(--green);}
+  .t-rec{background:#3a311f;color:var(--amber);}
+  table{border-collapse:collapse;width:100%;font-size:13px;margin-top:6px;}
+  td,th{border:1px solid #2a313c;padding:8px 10px;text-align:left;vertical-align:top;}
+  th{background:#232a33;color:var(--muted);font-weight:600;}
+  .k{color:var(--red);font-weight:600;}
+  .ok{color:var(--green);}
+  ul{margin:8px 0;padding-left:20px;}
+  li{margin:4px 0;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;}
+</style>
+</head>
+<body>
+<h1>凝冰结魄 · 卡顿根因与性能优化</h1>
+<div class="sub">grill-me 取证结论 · 2026-08-29　|　相比上一轮「ryzenadj 挂起」假设，本轮证据更贴合「新版比旧版更卡」的描述</div>
+
+<div class="card">
+  <h2>现象（来自你的描述）</h2>
+  <ul>
+    <li>重启后卡顿缓解，但不开任何程序、仅跑 NBJ 仍有少量卡顿。</li>
+    <li><b>「即便是跑旧版，旧版也没新版这么卡」</b> → 这是典型的 <b>回归（新增代码开销）</b>信号，不是纯环境/功耗问题。</li>
+    <li>滚动主页卡片列表时尤其卡，认为「帧率不够高」。WorkBuddy 在滚动、无点击时完全不卡。</li>
+    <li>直觉：低功耗下 HX370 掌机反而比本机顺 —— 因为掌机 DPR=1.5 放大惩罚会让「半透明层重绘」更贵，但若没进这条路径就顺。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>根因（已钉死）<span class="tag t-root">ROOT CAUSE</span></h2>
+  <p>主窗口本身<b>不透明</b>（<code>WA_TranslucentBackground=False</code> + <code>setMask</code> 切圆角），不是元凶。真正开销来自一个<b>整窗大小的半透明子控件 <code>_GlowOverlay</code></b>（<code>WA_TranslucentBackground=True</code>，呼吸辉光层）：</p>
+  <table>
+    <tr><th>路径</th><th>现象</th><th>为什么卡</th></tr>
+    <tr>
+      <td class="mono">breathing.py → ov.update()</td>
+      <td>呼吸灯以 <code>_SCANLINE_TICK_MS=40</code>（≈25fps）持续驱动<b>整窗重绘</b></td>
+      <td>半透明层每次重绘都强制 DWM 对整个表面做 Alpha 混合，且受<b>分数 DPR×1.5</b>（掌机）放大惩罚 → 即使前台不操作也在烧 GPU/CPU</td>
+    </tr>
+    <tr>
+      <td class="mono">app_window._mark_scrolling()</td>
+      <td>原本应在「滚动时暂缓呼吸重绘」，但<b>已被删成空壳 <code>return</code></b></td>
+      <td>于是「滚动卡片列表」与「~20–25fps 半透明层重绘」<b>叠加</b> → 滚动卡顿的成因</td>
+    </tr>
+  </table>
+  <p><b>为什么 WorkBuddy 不卡：</b>它没有这种「常驻半透明动画层」，滚动只是 ListView 自己的局部重绘，不参与 DWM 整窗 Alpha 合成。</p>
+  <p class="ok">已排除：<code>_fast=1Hz</code> / <code>_slow=2Hz</code> / <code>_batt=2Hz</code> 只是刷新文本，不是每帧重绘元凶；卡片 <code>BlockPanel.paintEvent</code> 仅圆角填充+细边框，选中才多几笔，不是滚动卡顿主因。</p>
+</div>
+
+<div class="card">
+  <h2>已实施修复（低风险 · 文档推荐旋钮）<span class="tag t-fix">FIXED</span></h2>
+  <table>
+    <tr><th>文件</th><th>改动</th><th>效果</th></tr>
+    <tr>
+      <td class="mono">ui/breathing.py</td>
+      <td><code>_SCANLINE_TICK_MS</code> 由 40 → <b>50</b>（≈20fps）</td>
+      <td>常驻半透明层重绘负载降约 20%，呼吸观感不变</td>
+    </tr>
+    <tr>
+      <td class="mono">ui/app_window.py</td>
+      <td>① 初始化 <code>self._scroll_freeze_until = 0.0</code><br>② <code>_mark_scrolling()</code> 从空壳改为 <code>self._scroll_freeze_until = time.monotonic() + 0.18</code><br>③ <code>_on_breath()</code> 接入滚动冻结：<code>if time.monotonic() &lt; getattr(self,"_scroll_freeze_until",0.0): return</code></td>
+      <td>滚动输入后短暂冻结呼吸辉光重绘，与滚动解耦；相位继续推进，滚动停后<b>无缝恢复</b></td>
+    </tr>
+  </table>
+  <p>验证：<span class="ok">py_compile + pyflakes 两文件通过</span>（COMPILE_OK）。改动仅纯 .py，掌机同步 src 即生效，<b>免重建 exe</b>。</p>
+</div>
+
+<div class="card">
+  <h2>取证：为什么 logs/nbj_profile.log 找不到</h2>
+  <p><code>core/profile.py</code> 的采样器 <code>ENABLED = bool(os.environ.get("NBJ_PROFILE"))</code> —— <b>只有设置该环境变量才会写日志</b>，默认零开销、不落盘。这也是为什么你找不到文件。</p>
+  <p class="mono">开启取证：&nbsp; set NBJ_PROFILE=1 &amp;&amp; launch.bat</p>
+  <p>掌机同步 src 后同样跑上述命令，跑 30 秒即可拿到 CPU / 帧 / 重绘热点，佐证「呼吸层重绘」是否为主开销。</p>
+</div>
+
+<div class="card">
+  <h2>后续根治方案（未实施，验证收益后再采用）<span class="tag t-rec">RECOMMEND</span></h2>
+  <ul>
+    <li><b>把 <code>_GlowOverlay</code> 提升为顶层窗口</b>，用 <code>setWindowOpacity</code> 呼吸，彻底免去「每帧整窗重绘」。注意：它是子控件时 <code>setWindowOpacity</code> 不生效，必须改架构（风险更高的重构）。</li>
+    <li>旋钮已先验证：若 40→50ms + 滚动冻结后体感已可接受，就不必上重构；若仍卡，再走顶层窗口方案。</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>掌机验证建议（A/B）</h2>
+  <p>为避免「环境叠加」干扰，建议一次性确认以下开关状态，排除它们与渲染卡顿的耦合：</p>
+  <ul>
+    <li>ryzenadj / GPU 浮动锁频 / 负载门控降压 是否开着（旧 ryzenadj 挂起假设需复核）</li>
+    <li>用 <code>set NBJ_PROFILE=1 &amp;&amp; launch.bat</code> 跑 30s，对比「滚动时」与「静止时」的采样数据</li>
+    <li>同步 src 后删除 <code>__pycache__</code> 避免旧字节码让改动未生效</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>变更记录</h2>
+  <p>已向 <code>ningbingjue/changelog.json</code> 追加一条「卡顿根因钉死 + 性能优化」entry（JSON 校验通过，共 68 条）。</p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,26 @@
+tests/test_skin.py::test_ls_nav_items_carry_gamepad_hints
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+____________________ test_ls_nav_items_carry_gamepad_hints ____________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x000001C1FC9396D0>
+    def test_ls_nav_items_carry_gamepad_hints(qapp):
+        app = Application(ROOT, headless=False).boot()
+        ls_panel = next((p for p in app._window.panels if isinstance(p, LSPanel)), None)
+        assert ls_panel is not None
+        items = ls_panel.nav_items()
+        by_widget = {it.widget: it.hint for it in items}
+>       assert by_widget.get(ls_panel.load_btn) == "A"
+E       AssertionError: assert '' == 'A'
+E         
+E         - A
+tests\test_skin.py:78: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 3 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[hotkey] RegisterHotKey 失败: mods=0xa vk=0x77 err=1409
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_skin.py::test_ls_nav_items_carry_gamepad_hints - AssertionE...
+1 failed in 15.26s

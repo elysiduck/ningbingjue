@@ -1,0 +1,261 @@
+#src Hotkey handler properties
+#dst ÈÈ¼ü´¦Àí³ÌĞòÊôĞÔ
+#end
+
+#src On-Screen Display
+#dst ÆÁÄ»ÏÔÊ¾
+#end
+#src Show On-Screen Display
+#dst ÏÔÊ¾ÆÁÄ»ÏÔÊ¾
+#end
+#src Hide On-Screen Display
+#dst Òş²ØÆÁÄ»ÏÔÊ¾
+#end 
+#src Toggle On-Screen Display
+#dst ÇĞ»»ÆÁÄ»ÏÔÊ¾
+#end
+
+#src Framerate limiter
+#dst Ö¡ÂÊÏŞÖÆÆ÷
+#end
+#src Enable framerate limter
+#dst ÆôÓÃÖ¡ÂÊÏŞÖÆ
+#end
+#src Disable framerate limiter
+#dst ½ûÓÃÖ¡ÂÊÏŞÖÆÆ÷
+#end
+#src Toggle framerate limiter
+#dst ÇĞ»»Ö¡ÂÊÏŞÖÆÆ÷
+#end
+
+#src Screenshots
+#dst ½ØÍ¼
+#end
+#src Screen capture
+#dst ²¶»ñÆÁÄ»½ØÍ¼
+#end
+
+#src Screen capture properties
+#dst ÆÁÄ»½ØÍ¼ÊôĞÔ
+#end
+#src Screenshot format
+#dst ÆÁÄ»½ØÍ¼¸ñÊ½
+#end
+#src Screenshots folder
+#dst ÆÁÄ»½ØÍ¼ÎÄ¼ş¼Ğ
+#end
+#src Browse
+#dst ä¯ÀÀ
+#end
+#src View
+#dst ÊÓÍ¼
+#end
+#src Show On-Screen Display on captured screenshots and videos
+#dst ÔÚ²¶»ñµÄÆÁÄ»½ØÍ¼ºÍÊÓÆµÉÏÏÔÊ¾ÆÁÄ»ÏÔÊ¾[OSD]
+#end
+
+#src Videos
+#dst ÊÓÆµ
+#end
+#src Video capture
+#dst ÊÓÆµ²¶»ñ
+#end
+#src Video prerecord
+#dst ÊÓÆµÔ¤Â¼
+#end
+
+#src Video capture properties
+#dst ÊÓÆµ²¶»ñÊôĞÔ
+#end
+#src General
+#dst ³£¹æ
+#end
+#src Video format
+#dst ÊÓÆµ¸ñÊ½
+#end
+#src Videos folder
+#dst ÊÓÆµÎÄ¼ş¼Ğ
+#end
+#src Video stream
+#dst ÊÓÆµÁ÷
+#end
+#src Capture mode
+#dst ²¶»ñÄ£Ê½
+#end
+#src mixed
+#dst »ìºÏ
+#end
+#src desktop
+#dst ×ÀÃæ
+#end
+#src 3D application
+#dst 3DÓ¦ÓÃ³ÌĞò
+#end
+#src Frame size
+#dst »­Ãæ´óĞ¡
+#end
+#src full frame
+#dst È«»­Ãæ
+#end
+#src 1/2 frame
+#dst 1/2 »­Ãæ
+#end
+#src 1/3 frame
+#dst 1/3 »­Ãæ
+#end
+#src 1/4 frame
+#dst 1/4 »­Ãæ
+#end
+#src Audio stream
+#dst ÒôÆµÁ÷
+#end
+#src Downmix multichannel audio to stereo
+#dst ½«¶àÉùµÀÒôÆµ½µ»ìÎªÁ¢ÌåÉù
+#end
+#src stereo rip
+#dst Á¢ÌåÉù·­Â¼
+#end
+#src stereo mix
+#dst Á¢ÌåÉù»ìÒô
+#end
+#src Mix multiple audio tracks
+#dst »ìºÏ¶à¸öÒô¹ì
+#end
+#src None
+#dst ÎŞ
+#end
+#src Auto select
+#dst ×Ô¶¯Ñ¡Ôñ
+#end
+#src DirectSound capture device
+#dst ²¶»ñDirectSoundÉè±¸
+#end
+#src WASAPI playback device
+#dst ²¥·ÅWASAPIÉè±¸
+#end
+#src WASAPI capture device
+#dst ²¶»ñWASAPIÉè±¸
+#end
+#src There are no devices
+#dst Ã»ÓĞÉè±¸
+#end
+#src Audio source #1
+#dst ÒôÆµÔ´#1
+#end
+#src Audio source #2
+#dst ÒôÆµÔ´#2
+#end
+#src Push-To-Talk hotkey
+#dst Ò»¼üÍ¨»°ÈÈ¼ü
+#end
+#src There are no devices available
+#dst Ã»ÓĞ¿ÉÓÃµÄÉè±¸
+#end
+#src Use dedicated encoder server
+#dst Ê¹ÓÃ×¨ÓÃ±àÂëÆ÷·şÎñÆ÷
+#end
+
+#src Video prerecording properties
+#dst ÊÓÆµÔ¤Â¼ÖÆÊôĞÔ
+#end
+#src Prerecord buffer location
+#dst Ô¤Â¼»º³åÇøÎ»ÖÃ
+#end
+#src file
+#dst ÎÄ¼ş
+#end
+#src RAM
+#dst RAM
+#end
+#src Prerecord buffer time limit, in seconds
+#dst Ô¤Â¼ÖÆ»º³åÇøÊ±¼äÏŞÖÆ£¨ÒÔÃëÎªµ¥Î»£©
+#end
+#src Prerecord buffer size limit, in MB
+#dst Ô¤Â¼ÖÆ»º³åÇø´óĞ¡ÏŞÖÆ£¬ÒÔMBÎªµ¥Î»
+#end
+#src Enable automatic prerecording mode
+#dst ÆôÓÃ×Ô¶¯Ô¤Â¼Ä£Ê½
+#end
+
+#src Benchmark
+#dst »ù×¼
+#end
+#src Begin recording
+#dst ¿ªÊ¼Â¼ÖÆ
+#end
+#src End recording
+#dst ½áÊøÂ¼ÖÆ
+#end
+
+#src Benchmark properties
+#dst »ù×¼ÊôĞÔ
+#end
+#src Benchmark results file
+#dst »ù×¼²âÊÔ½á¹ûÎÄ¼ş
+#end
+#src Recreate existing benchmark results files
+#dst ÖØĞÂ´´½¨ÏÖÓĞµÄ»ù×¼²âÊÔ½á¹ûÎÄ¼ş
+#end
+
+#src Profiles
+#dst ¸öÈË×ÊÁÏ
+#end
+#src Programmable profile modifier 1
+#dst ¿É±à³ÌÅäÖÃÎÄ¼şĞŞ¸ÄÆ÷ 1
+#end
+#src Programmable profile modifier 2
+#dst ¿É±à³ÌÅäÖÃÎÄ¼şĞŞ¸ÄÆ÷ 2
+#end
+#src Programmable profile modifier 3
+#dst ¿É±à³ÌÅäÖÃÎÄ¼şĞŞ¸ÄÆ÷ 3
+#end
+#src Programmable profile modifier 4
+#dst ¿É±à³ÌÅäÖÃÎÄ¼şĞŞ¸ÄÆ÷ 4
+#end
+
+#src Programmable profile modifier properties
+#dst ¿É±à³ÌÅäÖÃÎÄ¼şĞŞ¸ÄÆ÷ÊôĞÔ 
+#end
+#src Description
+#dst ËµÃ÷
+#end
+#src Target profile (leave blank for global)
+#dst Ä¿±êÅäÖÃÎÄ¼ş£¨ÎªÈ«¾ÖÁô¿Õ£©
+#end
+#src Target profile property
+#dst Ä¿±ê¸öÈË×ÊÁÏÊôĞÔÿ
+#end
+#src Modifier type
+#dst ĞŞÊÎ·ûÀàĞÍ
+#end
+#src set
+#dst set
+#end
+#src add
+#dst Ìí¼Ó
+#end
+#src Modifier value
+#dst ĞŞ¸ÄÆ÷Öµ
+#end 
+#src Preset
+#dst Ô¤Éè
+#end
+#src custom
+#dst ×Ô¶¨Òå
+#end
+#src Set 60 FPS framerate limit
+#dst ÉèÖÃ60 FPSÖ¡ËÙÂÊÏŞÖÆ
+#end
+#src Increase framerate limit
+#dst Ôö¼ÓÖ¡ÂÊÏŞÖÆ
+#end
+#src Decrease framerate limit
+#dst ½µµÍÖ¡ÂÊÏŞÖÆ
+#end
+#src Increase Scanline Sync index
+#dst Ôö¼ÓÉ¨ÃèÏßÍ¬²½Ë÷Òı
+#end
+#src Decrease Scanline Sync index
+#dst ½µµÍÉ¨ÃèÏßÍ¬²½Ë÷Òı
+#end
+

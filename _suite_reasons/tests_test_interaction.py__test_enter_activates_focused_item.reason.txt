@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_enter_activates_focused_item
+STATUS=CRASH
+qapp = <PyQt6.QtWidgets.QApplication object at 0x000001F4E7067B10>
+    def test_enter_activates_focused_item(qapp):
+        app = Application(ROOT, headless=False).boot()
+        win = app._window
+        ctrl = win._controller
+        ctrl.refresh()
+        # Focus the rtss toggle and confirm it flips lock_enabled.
+        for i, it in enumerate(ctrl._items):
+            if it.widget is _rtss_panel(win).toggle_btn:
+                ctrl.set_focus(i)
+                break
+        before = app.blocks["rtss"].lock_enabled
+        ctrl.activate()
+        after = app.blocks["rtss"].lock_enabled
+>       assert before != after
+E       assert True != True
+tests\test_interaction.py:88: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 1 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_enter_activates_focused_item - assert ...
+1 failed in 24.73s

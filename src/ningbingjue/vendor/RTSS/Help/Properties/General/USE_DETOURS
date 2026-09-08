@@ -1,0 +1,7 @@
+Use Microsoft Detours API hooking
+By default %PRODUCTNAME% uses its own original API hooking implementation, which can reliably intercept 3D application's API function calls even if they are already intercepted by any third party hooking application (e.g. one more overlay). This is achieved with original safe hook chaining approach, which is allowing different hook engines to coexist and intercept the same function call safely. However, some third party applications based on intercepting 3D API function calls (e.g. third party overlays and videocapture/steaming applications) may use Microsoft Detours hooking library, which doesn't provide native support for safe hook chaining and may conflict with third party hooks if different hook engine is in use. Such applications may not work properly when %PRODUCTNAME% is active. 
+You may enable this option to force %PRODUCTNAME% to use Microsoft Detours instead of own API hooking implementation. It may improve compatibility with such applications.
+
+Hints:
+- This setting is specific to currently selected application profile.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

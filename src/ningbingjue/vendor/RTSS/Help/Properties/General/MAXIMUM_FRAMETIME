@@ -1,0 +1,5 @@
+Display maximum frametime
+Allows displaying either instantaneous current frametime value or maximum frametime value during each refresh period. Maximum frametime value can be used for framerate stutters detection.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

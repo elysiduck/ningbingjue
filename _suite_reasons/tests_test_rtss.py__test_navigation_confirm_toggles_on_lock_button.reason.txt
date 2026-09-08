@@ -1,0 +1,20 @@
+tests/test_rtss.py::test_navigation_confirm_toggles_on_lock_button
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_navigation_confirm_toggles_on_lock_button ________________
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-738/test_navigation_confirm_toggle0')
+make_rtss_ui = <function make_rtss_ui.<locals>._make at 0x0000012B0C57EA20>
+    def test_navigation_confirm_toggles_on_lock_button(tmp_path, make_rtss_ui):
+        block, _ = _block(tmp_path, make_rtss_ui)
+        block.on_activate_item()
+        assert block.focus_idx.value == 0
+>       block.on_item_confirm()  # idx 0 -> toggle
+        ^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RtssBlock' object has no attribute 'on_item_confirm'
+tests\test_rtss.py:66: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_rtss.py::test_navigation_confirm_toggles_on_lock_button - A...
+1 failed in 0.62s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-52825a63-f037-454c-b51b-201b072e0f86", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-ec4b10a3-1a25-490b-bfc9-a600a9e9b759", "reason": "windows-sandbox-recycle-bin-unavailable"}

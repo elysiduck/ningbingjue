@@ -1,0 +1,6 @@
+Enable compatibility with modified Direct3D runtime libraries
+By default %PRODUCTNAME% supports Direct3D applications using native Microsoft Direct3D runtime libraries only. You may enable this option to make it compatible with Direct3D applications using custom modified runtime Direct3D proxy libraries (e.g. InjectFXAA enabled Direct3D applications).
+This option is profile specific, so you can configure it independently for different applications. It is not recommended to enable it globally, because the compatibiltity mode can prevent some Direct3D applications from starting.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

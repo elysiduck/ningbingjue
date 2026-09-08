@@ -1,0 +1,5 @@
+Start with Windows
+Allows starting %PRODUCTNAME% with Windows. Enable this option only when using %PRODUCTNAME% as a standalone framerate monitoring solution. If you are using this application in conjunction with clients, such as RivaTuner, HIS iTurbo, EVGA Precision or MSI Afterburner, then the clients will load the server when necessary.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

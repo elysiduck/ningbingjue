@@ -1,0 +1,13 @@
+tests/test_metric_sampler_job_object.py::test_stop_closes_job_handle
+STATUS=FAILED
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________________________ test_stop_closes_job_handle _________________________
+    def test_stop_closes_job_handle():
+        """stop() 必须关闭 Job 句柄并置 None（正常退出路径）。"""
+>       from ningbingjue.core.metrics import MetricSampler, _make_kill_on_close_job
+E       ImportError: cannot import name '_make_kill_on_close_job' from 'ningbingjue.core.metrics' (C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\src\ningbingjue\core\metrics.py)
+tests\test_metric_sampler_job_object.py:43: ImportError
+=========================== short test summary info ===========================
+FAILED tests/test_metric_sampler_job_object.py::test_stop_closes_job_handle
+1 failed in 0.37s

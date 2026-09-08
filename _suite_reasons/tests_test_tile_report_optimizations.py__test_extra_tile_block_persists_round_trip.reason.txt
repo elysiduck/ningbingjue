@@ -1,0 +1,27 @@
+tests/test_tile_report_optimizations.py::test_extra_tile_block_persists_round_trip
+STATUS=FAILED
+__________________ test_extra_tile_block_persists_round_trip __________________
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-766/test_extra_tile_block_persists0')
+    def test_extra_tile_block_persists_round_trip(tmp_path):
+        """A saved ExtraTileBlock (with its own tiles) survives a reload."""
+>       cfg = _seed_with_extra(tmp_path)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_tile_report_optimizations.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-766/test_extra_tile_block_persists0')
+    def _seed_with_extra(tmp_path):
+        cfg = tmp_path / "layout.json"
+        ac = AppConfig()
+        ac.extra_tile_blocks = [ExtraTileBlock(
+            block_name="工具箱", block_theme_color="Teal", show_block_title=True,
+>           tiles=[Tile(name="Note", launch_path="C:/n.exe", launch_type="EXE",
+                        col=0, row=0, block_name="工具箱",
+                        block_theme_color="Teal", show_block_title=True)],
+        )]
+E       TypeError: Tile.__init__() got an unexpected keyword argument 'block_theme_color'
+tests\test_tile_report_optimizations.py:35: TypeError
+=========================== short test summary info ===========================
+FAILED tests/test_tile_report_optimizations.py::test_extra_tile_block_persists_round_trip
+1 failed in 0.59s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-4feb7567-25dc-41ed-bcc5-00972842e11f", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-35a321f7-9fcd-4638-b9ec-c0dfe27b1ccd", "reason": "windows-sandbox-recycle-bin-unavailable"}

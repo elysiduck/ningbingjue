@@ -1,0 +1,5 @@
+Enable frametime history overlay
+Enables graph displaying frametime history for the last 512 rendered frames. The history graph can be used for framerate stutters detection.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

@@ -1,0 +1,12 @@
+Scanline sync mode
+Allows switching between single, double and half scanline synchronization modes. 
+In single scanline synchronization mode framerate is being synchronized to rasterizer position per each display refresh period. Other words, you're limiting framerate to refresh rate and acheiving VSync ON effect with a tearline located in a fixed position. The tearline can be moved down and hidden in vertical blanking interval.
+In double scanline synchronization mode framerate is being synchronized to rasterizer position twice per display refresh period. Other words, you're limiting framerate to double refresh rate and acheiving VSync ON effect with two tearlines located in the fixed positions. Both tearlines can be moved down and one of them can be hidden in vertical blanking interval. 
+In half scanline synchronization mode framerate is being synchronized to rasterizer position once per two display refresh periods. Other words, you're limiting framerate to half of refresh rate and acheiving VSync ON effect with a tearline located in a fixed position. In this case tearline can be moved down and hidden in vertical blanking interval.
+
+Hints:
+- It is necessary to disable VSync for proper scanline synchronization functionality.
+- You may enable scanline sync in conjunction with front/back edge sync framerate limiting modes to activate hybrid scanline sync modes. In this case actual target scanline synchronization is performed just once on framerate limiting start then you can steer the tearline postiong with system clock.
+- You may use FCAT overlay in moving bar mode as visual tearline position indicator.
+- You may specify negative scanline index to set the offset from total number of scanlines.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

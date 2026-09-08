@@ -1,0 +1,220 @@
+"""ls block — Lossless Scaling preset manager.
+
+Faithful logic port of ``blocks/ls.ps1``.  The block only *manages*
+presets: it scans the LS presets directory, shows running state via
+process detection, parses the active ``settings.xml`` for scale / frame-gen /
+perf-mode, and loads a selected preset (copy into the active config).  It
+does NOT start/stop the LS process itself.  All I/O goes through the
+``LosslessScaling`` adapter (real file/process ops on host, Mock in tests).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ..core.color.api import get_button_state
+from ..core.color.palette import COLOR_GREEN, COLOR_YELLOW
+from ..core.color.rgb import Color
+from ..core.color.semantic import get_theme_accent, is_light_theme
+from ..core.navigation import (
+    FocusHolder,
+    clear_block_focus,
+    set_control_focus_visual,
+)
+from ..core.registry import Block
+from ..platform.lossless_scaling import LosslessScaling
+from .base import BlockBlueprint
+
+
+class _Btn:
+    def __init__(self) -> None:
+        self.text = ""
+        self._colors: tuple | None = None
+        self.focused = False
+        self.fore_color: Color | None = None
+
+    def set_colors(self, *args: Any) -> None:
+        self._colors = tuple(args)
+
+    def set_focus_visual(self, focused: bool) -> None:
+        self.focused = focused
+
+    def invalidate(self) -> None:
+        pass
+
+
+class LSBlock:
+    BTN_H = 28
+    BTN_GAP = 2
+    TITLE_H = 78
+    BOTTOM_H = 14
+    ROW_PAD = 12
+    ACTION_H = 40
+    MIN_ROWS = 3
+    MAX_ROWS = 8
+
+    def __init__(self, ls: LosslessScaling, ui: dict[str, Any] | None = None) -> None:
+        self.ls = ls
+        self.ui: dict[str, Any] = dict(ui or {})
+        self.theme_color = get_theme_accent()
+        self.presets: list[str] = []
+        self.focus_type: str = "list"
+        self.focus_idx = FocusHolder(0)
+        self.in_item_mode = False
+        self.preset_btns: list[_Btn] = []
+        self.btn_load = _Btn()
+        self.btn_save = _Btn()
+        self.btn_delete = _Btn()
+        self._status: dict[str, str] = {
+            "ScalingType": "关闭", "FrameGeneration": "关闭", "PerfMode": "关闭",
+        }
+        self._running = False
+        self._profile = "未追踪"
+        self.refresh_panel()
+
+    # -- refresh -------------------------------------------------------
+    def refresh_panel(self) -> None:
+        if self.ls.available:
+            self.presets = self.ls.list_presets()
+            self._status = self.ls.read_status()
+            self._running = self.ls.is_running()
+            self._profile = self.ls.current_profile()
+        self._render()
+
+    def layout_panel(self) -> None:
+        self._render()
+
+    # -- rendering ------------------------------------------------------
+    def _rebuild_preset_btns(self) -> None:
+        if len(self.preset_btns) != len(self.presets):
+            self.preset_btns = [_Btn() for _ in self.presets]
+            if self.focus_idx.value >= len(self.presets):
+                self.focus_idx.value = 0
+
+    def _render(self) -> None:
+        self._rebuild_preset_btns()
+        for i, name in enumerate(self.presets):
+            b = self.preset_btns[i]
+            active = (name == self._profile)
+            b.text = f"F{i + 1}  {name}" + ("  ✓" if active else "")
+            st = get_button_state(COLOR_GREEN, "solid") if active else get_button_state(self.theme_color, "frosted")
+            b.set_colors(st["Back"], st["Hover"], st["Border"], st["Fore"])
+        # action buttons
+        for b in (self.btn_load, self.btn_save, self.btn_delete):
+            b.set_colors(*[self.theme_color] * 4)
+        # status label
+        lbl = self.ui.get("status_label")
+        if lbl is not None:
+            run = "● 运行中" if self._running else "○ 未启动"
+            scale = self._status.get("ScalingType", "关闭")
+            fg = self._status.get("FrameGeneration", "关闭")
+            perf = self._status.get("PerfMode", "关闭")
+            lbl.text = f"LS 状态: {run} · 缩放: {scale} · 帧生成: {fg} · 性能模式: {perf}"
+        self._apply_focus_visual()
+
+    def _active_control(self) -> _Btn | None:
+        if self.focus_type == "list":
+            if 0 <= self.focus_idx.value < len(self.preset_btns):
+                return self.preset_btns[self.focus_idx.value]
+            return None
+        return {"btnLoad": self.btn_load, "btnSave": self.btn_save,
+                "btnDelete": self.btn_delete}.get(self.focus_type)
+
+    def _apply_focus_visual(self) -> None:
+        clear_block_focus([b for b in self.preset_btns + [self.btn_load, self.btn_save, self.btn_delete] if b is not None])
+        c = self._active_control()
+        if c is not None:
+            set_control_focus_visual(c, True)
+
+    # -- actions --------------------------------------------------------
+    def _load_by_name(self, name: str) -> None:
+        try:
+            idx = self.presets.index(name)
+        except ValueError:
+            return
+        self._load(idx)
+
+    def _load(self, index: int) -> None:
+        if 0 <= index < len(self.presets):
+            name = self.presets[index]
+            ok = self.ls.load_preset(name)
+            self.show_toast(f"已加载预设 {name}" if ok else f"加载失败: {name}", success=ok)
+            if ok:
+                self._profile = name
+            self.refresh_panel()
+
+    def _save(self) -> None:
+        name = self._profile if self._profile not in ("未追踪", "读取失败") else (
+            self.presets[self.focus_idx.value] if 0 <= self.focus_idx.value < len(self.presets) else "")
+        ok = self.ls.save_preset(name) if name else False
+        self.show_toast(f"已保存预设 {name}" if ok else "保存失败", success=ok)
+        self.refresh_panel()
+
+    def _delete(self, index: int) -> None:
+        if 0 <= index < len(self.presets):
+            name = self.presets[index]
+            ok = self.ls.delete_preset(name)
+            self.show_toast(f"已删除预设 {name}" if ok else "删除失败", success=ok)
+            self.refresh_panel()
+
+    # -- height --------------------------------------------------------
+    def _card_height(self) -> int:
+        rows = max(self.MIN_ROWS, min(self.MAX_ROWS, len(self.presets)))
+        return self.TITLE_H + rows * (self.BTN_H + self.BTN_GAP) + self.ROW_PAD + self.ACTION_H + self.BOTTOM_H
+
+    # -- theme ---------------------------------------------------------
+    def _set_title_color(self, color: Color) -> None:
+        title = self.ui.get("title")
+        if title is not None:
+            title.fore_color = color
+
+    def on_theme_change(self, accent: dict[str, Any]) -> None:
+        self.theme_color = get_theme_accent()
+        self._set_title_color(self.theme_color)
+        self._render()
+
+    # -- item-mode navigation -------------------------------------------
+    def on_activate_item(self) -> None:
+        self.in_item_mode = True
+        self.focus_type = "list"
+        self.focus_idx.value = 0
+        self._apply_focus_visual()
+
+    def on_deactivate_item(self) -> None:
+        self.in_item_mode = False
+        clear_block_focus([b for b in self.preset_btns + [self.btn_load, self.btn_save, self.btn_delete] if b is not None])
+
+    # -- toast ---------------------------------------------------------
+    def show_toast(self, text: str, success: bool = True) -> None:
+        panel = self.ui.get("toast_panel")
+        label = self.ui.get("toast_label")
+        if panel is not None and hasattr(panel, "set_tone"):
+            panel.set_tone(success)
+            panel.visible = True
+        if label is not None:
+            label.text = text
+            label.fore_color = Color.from_rgb(0, 230, 120) if success else Color.from_rgb(255, 80, 80)
+
+    # -- registration ----------------------------------------------------
+    def register(self, registry: Any) -> None:
+        bp = BlockBlueprint(
+            block_type="ls",
+            name="► LS预设",
+            color=COLOR_YELLOW,
+            card=self.ui.get("card"),
+            hooks={
+                "GetCardHeight": lambda: max(160, self._card_height()),
+                "OnRefresh": self.refresh_panel,
+                "OnLayout": self.layout_panel,
+                "OnSyncTitleColor": self._set_title_color,
+                "OnThemeChange": self.on_theme_change,
+                "OnActivateItem": self.on_activate_item,
+                "OnDeactivateItem": self.on_deactivate_item,
+            },
+        )
+        registry.register(bp.to_block())
+
+    def status(self) -> str:
+        """Short live readout for the smoke report / GUI panel."""
+        run = "运行中" if self._running else "未启动"
+        return f"LS {run} · {self._profile} · 缩放 {self._status.get('ScalingType', '关闭')}"

@@ -1,0 +1,21 @@
+tests/test_rtss.py::test_navigation_slider_adjust_changes_fps
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________________ test_navigation_slider_adjust_changes_fps __________________
+tmp_path = WindowsPath('C:/Users/13567/AppData/Local/Temp/pytest-of-Adgjllgy/pytest-739/test_navigation_slider_adjust_0')
+make_rtss_ui = <function make_rtss_ui.<locals>._make at 0x000001B5D3D8EA20>
+    def test_navigation_slider_adjust_changes_fps(tmp_path, make_rtss_ui):
+        block, _ = _block(tmp_path, make_rtss_ui)
+        block.fps = 40
+        block.on_activate_item()
+        # move focus to the thumb (col 1)
+>       block.on_navigate(10)
+        ^^^^^^^^^^^^^^^^^
+E       AttributeError: 'RtssBlock' object has no attribute 'on_navigate'
+tests\test_rtss.py:75: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/test_rtss.py::test_navigation_slider_adjust_changes_fps - Attrib...
+1 failed in 0.51s
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-13d4319e-e861-4717-806e-16945491d43e", "reason": "windows-sandbox-recycle-bin-unavailable"}
+[safe-delete][SAFE_DELETE_FAIL_CLOSED] {"target": "\\\\?\\C:\\Users\\13567\\AppData\\Local\\Temp\\pytest-of-Adgjllgy\\garbage-e8185579-a5e5-4aa6-8df0-d312304160c6", "reason": "windows-sandbox-recycle-bin-unavailable"}

@@ -1,0 +1,6 @@
+Enable benchmark mode
+Allows enabling benchmark statistics recording mode. In this mode %PRODUCTNAME% is calculating and optionally displaying the average, minimum, maximum, 1% low and 0.1% low framerates for all active 3D applications. 
+Client applications like MSI Afterburner can also trigger the benchmark mode with hotkeys directly while running 3D applications and save results to a text file.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

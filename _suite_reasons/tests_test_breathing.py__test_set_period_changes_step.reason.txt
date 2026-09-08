@@ -1,0 +1,16 @@
+tests/test_breathing.py::test_set_period_changes_step
+STATUS=CRASH
+F                                                                        [100%]
+================================== FAILURES ===================================
+________________________ test_set_period_changes_step _________________________
+    def test_set_period_changes_step():
+        bc = BreathingController()
+        bc.set_period(4.72)  # double the default period => half the step
+>       assert abs(bc._step - 0.04) < 1e-3
+E       assert 0.013247333111691413 < 0.001
+E        +  where 0.013247333111691413 = abs((0.053247333111691414 - 0.04))
+E        +    where 0.053247333111691414 = <ningbingjue.ui.breathing.BreathingController object at 0x000002419062C1A0>._step
+tests\test_breathing.py:24: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/test_breathing.py::test_set_period_changes_step - assert 0.01324...
+1 failed in 0.27s

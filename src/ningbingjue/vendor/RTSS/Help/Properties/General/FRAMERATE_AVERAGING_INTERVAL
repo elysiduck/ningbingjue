@@ -1,0 +1,5 @@
+Framerate averaging interval
+Due to its nature instantaneous framerate is rarely being static, even in fixed framerate usage scenarios immediate framerate is normally fluctuating near the target value. To filter such unwanted fluctuations framerate monitors are normally displaying averaged framerate value. You may use this option to adjust framerate averaging interval, or set it to 0 to completely disable framerate averaging.
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

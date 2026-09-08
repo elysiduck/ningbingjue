@@ -1,0 +1,27 @@
+tests/test_interaction.py::test_arrow_navigation_moves_focus
+STATUS=CRASH
+______________________ test_arrow_navigation_moves_focus ______________________
+qapp = <PyQt6.QtWidgets.QApplication object at 0x00000227CBA57B10>
+    def test_arrow_navigation_moves_focus(qapp):
+        app = Application(ROOT, headless=False).boot()
+        win = app._window
+        ctrl = win._controller
+        ctrl.refresh()
+        items = ctrl._items
+        assert len(items) > 1
+        first = ctrl._focus
+        ctrl.handle_key(_kev(Qt.Key.Key_Down))
+>       assert ctrl._focus != first or len(items) == 1
+E       assert (-1 != -1 or 17 == 1)
+E        +  where -1 = <ningbingjue.ui.interaction.InteractionController object at 0x00000227CBE66490>._focus
+E        +  and   17 = len([<ningbingjue.ui.interaction.NavItem object at 0x00000227CBB8D5A0>, <ningbingjue.ui.interaction.NavItem object at 0x00...eraction.NavItem object at 0x00000227CBB8D900>, <ningbingjue.ui.interaction.NavItem object at 0x00000227CBB8DA20>, ...])
+tests\test_interaction.py:68: AssertionError
+---------------------------- Captured stdout call -----------------------------
+[boot] 已清理 2 个遗留监视器进程
+pygame 2.6.1 (SDL 2.28.4, Python 3.13.14)
+Hello from the pygame community. https://www.pygame.org/contribute.html
+[hotkey] RegisterHotKey 失败: mods=0xa vk=0x77 err=1409
+[undervolt] 已加载但 disabled（enabled=false）。 状态机运行中，仅不写 ryzenadj；改 config/undervolt.json 的 enabled=true 启用。
+=========================== short test summary info ===========================
+FAILED tests/test_interaction.py::test_arrow_navigation_moves_focus - assert ...
+1 failed in 25.67s

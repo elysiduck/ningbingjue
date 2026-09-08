@@ -1,0 +1,5 @@
+Enable 64-bit applications support service
+Enables helper service, which provides 64-bit applications support. You may disable it for troubleshooting or if you don't need %PRODUCTNAME% functionality in 64-bit applications. Please take a note that due to licensing third party 64-bit On-Screen Display functionality in overclocking applications is curretnly limited to MSI Afterburner only. 
+
+Hints:
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

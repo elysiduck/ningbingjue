@@ -1,0 +1,6 @@
+Application detection level : none
+Disables detection for the application associated with the current profile. In this mode %PRODUCTNAME% doesn't collect runtime statistics, such as framerate, and doesn't provide additional services, such as On-Screen Display, to the associated application.
+
+Hints:
+- Some protected applications may treat executable code hooking required for proper application detection, statistics collection and On-Screen Display rendering as possible threat and refuse to run. To troubleshoot such issues try to add a profile for such application and decrease application detection level.
+- You may disable user interface tooltips via <User interface> tab in advanced properties.

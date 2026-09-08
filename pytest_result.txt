@@ -1,0 +1,13 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.14, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue\.build_venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\13567\WorkBuddy\2026-07-18-10-22-49\ningbingjue
+configfile: pyproject.toml
+collecting ... collected 505 items
+
+tests/test_app_integration.py::test_all_six_blocks_registered PASSED     [  0%]
+tests/test_app_integration.py::test_card_height_hooks_work PASSED        [  0%]
+tests/test_app_integration.py::test_backward_compat_shims_wired FAILED   [  0%]
+tests/test_app_integration.py::test_procmon_toggle_via_shim FAILED       [  0%]
+tests/test_app_integration.py::test_save_all_persists PASSED             [  0%]
+tests/test_app_window_gui.py::test_default_accent_paints_without_error 

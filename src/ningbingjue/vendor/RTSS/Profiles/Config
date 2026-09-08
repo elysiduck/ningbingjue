@@ -1,0 +1,83 @@
+[Plugins]
+OverlayEditor.dll=1
+HotkeyHandler.dll=1
+
+[Shared]
+Flags=00000001
+
+[Settings]
+Skin=Default4Chinese.usf
+WindowX=1470
+WindowY=396
+FirstRun=0
+StartMinimized=1
+StartWithWindows=0
+ShowTooltips=1
+EnableEncoderServer=0
+Enable64Bit=1
+Use64BitEncoderServer=1
+HidePreCreatedProfiles=1
+LastUpdateCheck=6571FDA1h
+UpdateCheckingPeriod=0
+Language=CHN
+LayeredWindowMode=1
+LayeredWindowAlpha=230
+ScaleFactor=85
+[FnOffsetCache64]
+DDRAW.DLL=0009B000 63834D1A
+IDirectDrawSurface7::Flip=0002D510
+D3D9.DLL=001A9168 B741C856
+IDirect3DDevice9::Present=000B53D0
+IDirect3DDevice9::Release=00039170
+IDirect3DDevice9::Reset=000B56F0
+IDirect3DSwapChain9::Present=0000E890
+IDirect3DDevice9Ex::PresentEx=0000E980
+IDirect3DDevice9Ex::ResetEx=000B5800
+DXGI.DLL=0013F278 D55FAAD8
+IDXGISwapChain::Present=000087E0
+IDXGISwapChain::SetFullscreenState=0003B400
+IDXGISwapChain::ResizeBuffers=0003C1C0
+IDXGISwapChain::Release=00036600
+IDXGISwapChain1::Present1=000074B0
+IDXGIFactory::CreateSwapChain=0001DDA0
+IDXGIFactory2::CreateSwapChainForHwnd=0001E400
+IDXGIFactory2::CreateSwapChainForCoreWindow=000918B0
+D3D12Core.DLL=0035ADB8 34F97685
+ID3D12CommandQueue::ExecuteCommandLists=00019F40
+IDXGISwapChain3::ResizeBuffers1=0009B410
+IDXGISwapChain1::m_pCommandQueue=00000178
+kernel32.dll=000CD2D8 9AF4D661
+LoadLibraryA=0004A3B0
+LoadLibraryW=000460F0
+Version=0000000A
+[FnOffsetCache]
+DDRAW.DLL=00085000 639A5215
+IDirectDrawSurface7::Flip=00038230
+D3D8.DLL=000B4000 370F443A
+IDirect3DDevice8::Present=0002A2F0
+IDirect3DDevice8::Release=00029910
+IDirect3DDevice8::Reset=00029ED0
+D3D9.DLL=001760A8 B9A5CB18
+IDirect3DDevice9::Present=000E0DC0
+IDirect3DDevice9::Release=00066660
+IDirect3DDevice9::Reset=000E11C0
+IDirect3DSwapChain9::Present=00043700
+IDirect3DDevice9Ex::PresentEx=000E0E50
+IDirect3DDevice9Ex::ResetEx=000E12E0
+DXGI.DLL=00109BC0 3ADBCF5F
+IDXGISwapChain::Present=000B57B0
+IDXGISwapChain::SetFullscreenState=0002C6A0
+IDXGISwapChain::ResizeBuffers=0002ACD0
+IDXGISwapChain::Release=0004F8D0
+IDXGISwapChain1::Present1=00073EB0
+IDXGIFactory::CreateSwapChain=000AC240
+IDXGIFactory2::CreateSwapChainForHwnd=000AC9F0
+IDXGIFactory2::CreateSwapChainForCoreWindow=000AC7F0
+D3D12Core.DLL=002DE520 F7898264
+ID3D12CommandQueue::ExecuteCommandLists=00091FD0
+IDXGISwapChain3::ResizeBuffers1=000B6E90
+IDXGISwapChain1::m_pCommandQueue=000000E0
+kernel32.dll=000A8DB0 685C6AF1
+LoadLibraryA=00030A40
+LoadLibraryW=0002F6F0
+Version=0000000A
