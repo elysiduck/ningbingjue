@@ -276,12 +276,14 @@ class FreezeBlock:
         self.minimize_on_unfreeze: bool = True
         self._minimize_self: Any | None = None
         # Optional host-app callback that re-focuses the Ningbingjue window
-        # after a FREEZE completes.  Freezing minimises the target's windows
-        # (ProcessManager.suspend -> ShowWindow(SW_MINIMIZE)); minimising a
-        # foreground window makes Windows hand focus to some OTHER window, and
-        # the HUD being top-most (WindowStaysOnTopHint) does NOT mean it holds
-        # focus — so the overlay goes dim.  The GUI injects a Qt-based
-        # re-activation here; headless / test usage leaves it unset (no-op).
+        # after a FREEZE completes.  Freezing hides the target's windows
+        # (ProcessManager.suspend -> ShowWindow(SW_HIDE)，2026-09-10 起由
+        # SW_MINIMIZE 改为 SW_HIDE 以避免破坏 DXGI 全屏独占 swapchain、
+        # 导致原神解冻花屏); hiding a foreground window makes Windows hand
+        # focus to some OTHER window, and the HUD being top-most
+        # (WindowStaysOnTopHint) does NOT mean it holds focus — so the overlay
+        # goes dim.  The GUI injects a Qt-based re-activation here; headless /
+        # test usage leaves it unset (no-op).
         self._refocus_cb: Any | None = None
         self._load_pids()
         # 跨启动的冻结记录校验（取代旧的「启动一律清空」方案 A）：
@@ -979,13 +981,15 @@ class FreezeBlock:
         """Re-activate the host window after a successful freeze, if a re-focus
         hook was injected.
 
-        Freezing minimises the target's windows (``ShowWindow(SW_MINIMIZE)``
-        before ``NtSuspendProcess``), and minimising a foreground window makes
-        Windows hand focus to another window — so the HUD loses keyboard focus
-        even though it stays top-most.  Called only on the SUCCESS path of a
-        freeze (never on un-freeze, which deliberately minimises the app back
-        to the game).  Best-effort: any failure is swallowed so a broken
-        re-focus can never abort the freeze bookkeeping."""
+        Freezing hides the target's windows (``ShowWindow(SW_HIDE)`` before
+        ``NtSuspendProcess``; 2026-09-10 起由 SW_MINIMIZE 改为 SW_HIDE，因为
+        最小化会破坏 DXGI 全屏独占 swapchain，导致原神等游戏解冻后花屏),
+        and hiding a foreground window makes Windows hand focus to another
+        window — so the HUD loses keyboard focus even though it stays
+        top-most.  Called only on the SUCCESS path of a freeze (never on
+        un-freeze, which deliberately minimises the app back to the game).
+        Best-effort: any failure is swallowed so a broken re-focus can never
+        abort the freeze bookkeeping."""
         cb = self._refocus_cb
         if cb is None:
             return
@@ -1170,8 +1174,13 @@ class FreezeBlock:
 
         根因修复（2026-08-21，绝区零「解冻卡住」）：先只恢复线程（不还原/
         激活窗口）→ 进程活了窗口才响应 → 再把整组窗口移回当前桌面 → 最后
-        统一 SW_RESTORE 还原。窗口还原时已在当前桌面，绝不会跳到恢复进程
-        所在虚拟桌面。``move_pids`` 失败再走 ``move_to_current`` 逐成员补移。"""
+        统一还原窗口。窗口还原时已在当前桌面，绝不会跳到恢复进程
+        所在虚拟桌面。``move_pids`` 失败再走 ``move_to_current`` 逐成员补移。
+
+        注：最后一步的「还原」自 2026-09-10 起是 ``SW_SHOW``（配合冻结时的
+        ``SW_HIDE``），不再是 ``SW_RESTORE``；顺序本身不变，故上述防跳桌面
+        的保证依然成立。改用 hide/show 是为了不破坏 DXGI 全屏独占 swapchain
+        （原神解冻花屏），详见 ``ProcessManager`` 类注释。"""
 
         def work() -> dict[str, Any]:
             ok = True
@@ -1230,9 +1239,11 @@ class FreezeBlock:
                                 moved = True
                         except Exception:
                             pass
-            # 窗口已移回当前桌面，最后统一还原+激活（SW_RESTORE）。
-            # 仅在全部恢复成功时执行；失败时保持最小化停在原桌面
+            # 窗口已移回当前桌面，最后统一还原+激活（SW_SHOW）。
+            # 仅在全部恢复成功时执行；失败时保持隐藏停在原桌面
             # （至少不触发桌面跳转），具体原因由 hint 给出。
+            # 2026-09-10：SW_RESTORE -> SW_SHOW，配合冻结端的 SW_HIDE
+            # （避免破坏 DXGI 全屏独占 swapchain 导致原神花屏）。
             if ok and self.pm.available:
                 for gpid in live_pids:
                     self.pm.restore_window(gpid)

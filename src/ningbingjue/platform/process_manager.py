@@ -438,17 +438,33 @@ class Win32ProcessManager(ProcessManager):
     Faithful to the original ``blocks/freeze.ps1``:
     * suspend/resume open the process with ``PROCESS_SUSPEND_RESUME`` (0x0800)
       — the minimal right ``NtSuspendProcess``/``NtResumeProcess`` require.
-    * on suspend the target's visible windows are minimized (``ShowWindow`` 6);
-      on resume they are restored (``ShowWindow`` 9) — matches the PS1
-      ``Suspend-Proc`` / ``Resume-Proc`` window handling.
+    * 窗口隐藏策略（2026-09-10 修复原神花屏）：冻结用 ``SW_HIDE``(0)、
+      解冻用 ``SW_SHOW``(5)，**不再**用 ``SW_MINIMIZE``(6)/``SW_RESTORE``(9)。
+      原因：DXGI 全屏独占（flip-model）swapchain 的游戏（原神
+      GenshinImpact.exe，WS_POPUP 无边框主窗口）在收到 ``SW_MINIMIZE`` 后会
+      进入 OCCLUDED、back buffer 被 DWM 接管/内容失效；而进程随即被
+      NtSuspendProcess 挂起、窗口线程无法响应 swapchain 事件；解冻后主线程
+      刚醒、还没跑到 ``Present()``，屏幕显示的就是未初始化的显存 —— 用户看到
+      的「彩色竖条花屏」。``SW_HIDE`` 只是移除 WS_VISIBLE，不触发最小化语义，
+      swapchain 状态得以保留，恢复即正常。绝区零等窗口化 swapchain 的游戏
+      本来就不受此影响，此改动对它们同样安全。
+      副作用与对策：``SW_HIDE`` 后 ``IsWindowVisible`` 返回 False，所以
+      (a) 本类用 ``_hidden_hwnds`` 记住被隐藏的 HWND 以便恢复；
+      (b) 虚拟桌面模块（``virtual_desktop``）解析 HWND 时已放宽为不再强制
+          要求可见，否则隐藏窗口将无法被搬到后台桌面。
     * ``enumerate`` parses the wmic CSV with the ``csv`` module (command lines
       contain commas, so naive ``str.split`` corrupts the columns) and returns
       only processes in the current session, excluding our own PID.
     """
 
     PROCESS_SUSPEND_RESUME = 0x0800
-    SW_MINIMIZE = 6
-    SW_RESTORE = 9
+    SW_HIDE = 0
+    SW_SHOW = 5
+    SW_MINIMIZE = 6      # 保留：兼容历史调用与回退开关
+    SW_RESTORE = 9       # 保留：兼容历史调用与回退开关
+    # 回退开关：万一 SW_HIDE 方案在某些环境出问题，置 False 即恢复旧的
+    # 最小化/还原行为（仅影响窗口显示策略，不影响内核挂起）。
+    SWAPCHAIN_SAFE_HIDE = True
 
     def __init__(self) -> None:
         self._ntdll = None
@@ -467,6 +483,11 @@ class Win32ProcessManager(ProcessManager):
             self._kernel32 = None
             self._user32 = None
         self._suspended: set[int] = set()
+        # pid -> 被我们 SW_HIDE 掉的顶层窗口 HWND 列表。``SW_HIDE`` 会移除
+        # WS_VISIBLE，``IsWindowVisible`` 随之返回 False，解冻时按 PID 重新枚举
+        # 将**找不到**这些窗口（旧的最小化方案不受影响，因为最小化窗口仍带
+        # WS_VISIBLE）。故必须记住 HWND 才能可靠恢复。
+        self._hidden_hwnds: dict[int, list[int]] = {}
 
     @property
     def available(self) -> bool:
@@ -487,24 +508,68 @@ class Win32ProcessManager(ProcessManager):
     def _handle(self, pid: int) -> Any:
         return self._kernel32.OpenProcess(self.PROCESS_SUSPEND_RESUME, False, pid)  # type: ignore[attr-defined]
 
+    def _enum_pid_windows(self, pid: int, visible_only: bool = True) -> list[int]:
+        """枚举 ``pid`` 拥有的**顶层**窗口，返回 HWND 列表。
+
+        ``visible_only=True`` 时只收 ``IsWindowVisible`` 为真的窗口（冻结时
+        用：只隐藏用户看得见的）。``False`` 时收全部顶层窗口（兜底时用）。
+
+        Best-effort：任何异常都被吞掉，最多返回空列表。
+        """
+        if self._user32 is None:
+            return []
+        user32 = self._user32
+        found: list[int] = []
+
+        @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+        def _enum(hwnd: int, _lparam: int) -> bool:  # type: ignore[valid-type]
+            try:
+                pid_buf = ctypes.wintypes.DWORD(0)
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_buf))
+                if pid_buf.value == pid:
+                    if (not visible_only) or user32.IsWindowVisible(hwnd):
+                        found.append(int(hwnd))
+            except Exception:
+                pass
+            return True
+
+        try:
+            user32.EnumWindows(_enum, 0)  # type: ignore[arg-type]
+        except Exception:
+            pass
+        return found
+
     def _set_window_state(self, pid: int, minimized: bool) -> None:
+        """冻结时把窗口藏起来、解冻时放出来。
+
+        2026-09-10 起默认走 ``SW_HIDE`` / ``SW_SHOW`` 而非
+        ``SW_MINIMIZE`` / ``SW_RESTORE`` —— 详见类注释：最小化会破坏 DXGI
+        全屏独占 swapchain（原神解冻花屏）。开关 ``SWAPCHAIN_SAFE_HIDE``
+        置 False 可一键回退到旧行为。
+        """
         if self._user32 is None:
             return
         try:
             user32 = self._user32
-            found: list[int] = []
-
-            @ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
-            def _enum(hwnd: int, _lparam: int) -> bool:  # type: ignore[valid-type]
-                pid_buf = ctypes.wintypes.DWORD(0)
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid_buf))
-                if pid_buf.value == pid and user32.IsWindowVisible(hwnd):
-                    found.append(hwnd)
-                return True
-
-            user32.EnumWindows(_enum, 0)  # type: ignore[arg-type]
-            for hwnd in found:
-                user32.ShowWindow(hwnd, self.SW_MINIMIZE if minimized else self.SW_RESTORE)
+            if minimized:
+                found = self._enum_pid_windows(pid, visible_only=True)
+                if found and self.SWAPCHAIN_SAFE_HIDE:
+                    # 记住 HWND：SW_HIDE 之后 IsWindowVisible 为假，
+                    # 解冻时按 PID 枚举将找不到它们。
+                    self._hidden_hwnds[pid] = list(found)
+                cmd = self.SW_HIDE if self.SWAPCHAIN_SAFE_HIDE else self.SW_MINIMIZE
+                for hwnd in found:
+                    user32.ShowWindow(hwnd, cmd)
+            else:
+                # 优先用冻结时记住的 HWND（隐藏窗口枚举不到）。
+                found = self._hidden_hwnds.pop(pid, None) or []
+                if not found:
+                    # 兜底：App 重启导致记忆丢失 / 旧版本最小化遗留。
+                    # 这两种情况窗口都还带 WS_VISIBLE，按可见枚举能找回。
+                    found = self._enum_pid_windows(pid, visible_only=True)
+                cmd = self.SW_SHOW if self.SWAPCHAIN_SAFE_HIDE else self.SW_RESTORE
+                for hwnd in found:
+                    user32.ShowWindow(hwnd, cmd)
         except Exception:
             pass
 

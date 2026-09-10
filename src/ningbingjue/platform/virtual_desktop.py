@@ -267,6 +267,17 @@ public class WinEnumPid {
             if (p == pid && IsWindowVisible(hWnd)) result.Add(hWnd);
             return true;
         }, IntPtr.Zero);
+        // 2026-09-10：冻结改为 SW_HIDE（避免 DXGI 全屏独占 swapchain 被最小化
+        // 破坏导致原神花屏）。隐藏后 IsWindowVisible 为假，若这里仍强制要求
+        // 可见，被冻结的窗口就再也搬不到后台桌面了。故无可见窗口时回退收隐藏的。
+        if (result.Count == 0) {
+            EnumWindows((hWnd, _) => {
+                int p = 0;
+                GetWindowThreadProcessId(hWnd, out p);
+                if (p == pid) result.Add(hWnd);
+                return true;
+            }, IntPtr.Zero);
+        }
         return result;
     }
 }
@@ -843,6 +854,15 @@ public class WinEnumPid {
             if (p == pid && IsWindowVisible(hWnd)) result.Add(hWnd);
             return true;
         }, IntPtr.Zero);
+        // 2026-09-10：冻结改为 SW_HIDE，隐藏后 IsWindowVisible 为假；无可见
+        // 窗口时回退收隐藏的，否则被冻结窗口搬不到后台桌面。
+        if (result.Count == 0) {
+            EnumWindows((hWnd, _) => {
+                int p = 0; GetWindowThreadProcessId(hWnd, out p);
+                if (p == pid) result.Add(hWnd);
+                return true;
+            }, IntPtr.Zero);
+        }
         return result;
     }
 }
